@@ -1,0 +1,25 @@
+{
+  "overview": "ICES is a modern HR & Skills Management Platform built on the Internet Computer. It provides a complete HR solution with employee management, role-based access control, and analytics dashboard for Integrated Consulting & Engineering Solutions.",
+  "features": [
+    "Internet Identity login with role-based access (HR Admin, HR Manager, Manager, Employee, Direction)",
+    "Full employee CRUD with profiles, departments, contract info, and employment status",
+    "Profile picture upload and storage",
+    "Employee search and filtering by department, status, and role",
+    "Real-time dashboard with employee counts and department statistics",
+    "Responsive HR SaaS design with collapsible sidebar navigation",
+    "Production-ready multi-tenant architecture with stable Motoko storage"
+  ],
+  "category": "productivity",
+  "tags": [
+    "hr",
+    "employee-management",
+    "saas",
+    "internet-computer",
+    "motoko",
+    "react",
+    "tailwind",
+    "rbac",
+    "multi-tenant"
+  ],
+  "last_updated": "2026-05-07T09:34:51.132Z"
+}
