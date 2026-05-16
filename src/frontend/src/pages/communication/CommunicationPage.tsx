@@ -1,9 +1,9 @@
 import { useApi, apiFetch } from "@/hooks/use-api";
-import { useIcesAuth } from "@/hooks/use-ices-auth";
+import { useIcesAuth } from "@/contexts/AuthContext";
 import { Note, InternalEvent } from "@/types";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/shared/Card";
+import { Badge } from "@/components/shared/Badge";
+import { Button } from "@/components/shared/Button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { 
@@ -28,10 +28,13 @@ export default function CommunicationPage() {
   const { data: palmares, isLoading: palmaresLoading } = useApi<any>("/api/v1/communication/palmares");
   const { data: meetings, isLoading: meetingsLoading } = useApi<any[]>("/api/v1/communication/reunions");
 
+  // ✅ TOUS les useState ensemble AVANT tout return conditionnel
   const [expandedNoteId, setExpandedNoteId] = useState<number | null>(null);
   const [showEventForm, setShowEventForm] = useState(false);
   const [showMeetingForm, setShowMeetingForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showNoteForm, setShowNoteForm] = useState(false);
+  const [acknowledgedNotes, setAcknowledgedNotes] = useState<Record<number, string>>({});
 
   const [eventForm, setEventForm] = useState({
     title: "",
@@ -45,14 +48,6 @@ export default function CommunicationPage() {
     attendees: "",
     notes: "",
   });
-
-  const canCreateEvent = user?.role === "resp_rh" || user?.role === "admin_rh";
-  const canCreateMeeting =
-    user?.role === "resp_rh" || user?.role === "admin_rh" || user?.role === "direction";
-
-  const isLoading = notesLoading || eventsLoading || palmaresLoading || meetingsLoading;
-
-  const [showNoteForm, setShowNoteForm] = useState(false);
   const [noteForm, setNoteForm] = useState({
     title: "",
     content: "",
@@ -61,8 +56,13 @@ export default function CommunicationPage() {
     is_pinned: false
   });
 
-  const hasPublisherEndpoint = true; // backend expose maintenant POST /communication/notes
+  const canCreateEvent = user?.role === "resp_rh" || user?.role === "admin_rh";
+  const canCreateMeeting =
+    user?.role === "resp_rh" || user?.role === "admin_rh" || user?.role === "direction";
 
+  const isLoading = notesLoading || eventsLoading || palmaresLoading || meetingsLoading;
+
+  // ✅ return conditionnel APRÈS tous les hooks
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -70,8 +70,6 @@ export default function CommunicationPage() {
       </div>
     );
   }
-
-  const [acknowledgedNotes, setAcknowledgedNotes] = useState<Record<number, string>>({});
 
   const handleAcknowledge = async (noteId: number) => {
     try {
@@ -248,7 +246,6 @@ export default function CommunicationPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Content Area */}
         <div className="lg:col-span-2 space-y-8">
           <Tabs defaultValue="notes" className="w-full">
             <TabsList className="grid w-full grid-cols-3 max-w-[520px]">
@@ -267,6 +264,9 @@ export default function CommunicationPage() {
             </TabsList>
             
             <TabsContent value="notes" className="mt-6 space-y-4">
+              {(notes ?? []).length === 0 && (
+                <p className="text-sm text-muted-foreground">Aucune note publiée.</p>
+              )}
               {notes?.map(note => (
                 <Card key={note.id} className={`relative overflow-hidden ${note.is_pinned ? 'border-primary/30 bg-primary/5' : ''}`}>
                   {note.is_pinned && (
@@ -294,19 +294,19 @@ export default function CommunicationPage() {
                         {expandedNoteId === note.id ? "Réduire" : "Lire la suite"}
                         <ChevronRight size={14} />
                       </Button>
-                        {acknowledgedNotes[note.id] ? (
-                          <span className="text-xs font-medium text-accent flex items-center gap-1">
-                            {acknowledgedNotes[note.id]}
-                          </span>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleAcknowledge(note.id)}
-                          >
-                            Accuser réception / Lu
-                          </Button>
-                        )}
+                      {acknowledgedNotes[note.id] ? (
+                        <span className="text-xs font-medium text-accent flex items-center gap-1">
+                          {acknowledgedNotes[note.id]}
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleAcknowledge(note.id)}
+                        >
+                          Accuser réception / Lu
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -370,6 +370,9 @@ export default function CommunicationPage() {
                   )}
                 </Card>
               )}
+              {(events ?? []).length === 0 && (
+                <p className="text-sm text-muted-foreground">Aucun événement planifié.</p>
+              )}
               {events?.map(event => (
                 <Card key={event.id}>
                   <div className="flex flex-col md:flex-row">
@@ -398,7 +401,7 @@ export default function CommunicationPage() {
                       </div>
                     </div>
                     <div className="p-5 flex items-center">
-                      <Button variant="outline" size="sm" disabled title="Inscription/participation non implémentée côté backend">
+                      <Button variant="outline" size="sm" disabled>
                         Participer
                       </Button>
                     </div>
@@ -465,7 +468,6 @@ export default function CommunicationPage() {
                   )}
                 </Card>
               )}
-
               {(meetings ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">Aucune réunion enregistrée.</p>
               ) : (
@@ -489,7 +491,6 @@ export default function CommunicationPage() {
           </Tabs>
         </div>
 
-        {/* Sidebar / Palmarès */}
         <div className="space-y-6">
           <Card className="bg-gradient-to-br from-primary/10 via-background to-accent/5 border-primary/20 shadow-lg">
             <CardHeader className="text-center pb-2">

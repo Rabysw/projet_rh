@@ -3,8 +3,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional
 from enum import Enum
+from httpx import ConnectError
+from supabase_client import supabase
 
-# ICES Platform authentication model
 class UserRole(str, Enum):
     COLLABORATEUR = "collaborateur"
     MANAGER = "manager"
@@ -12,95 +13,102 @@ class UserRole(str, Enum):
     ADMIN_RH = "admin_rh"
     DIRECTION = "direction"
 
-# Simple authentication model (replace with real JWT in production)
+# Configuration des rôles pour les comptes de test (ANALYSIS_AND_PLAN.md)
+TEST_USERS_ROLES = {
+    "collab@ices.bj": UserRole.COLLABORATEUR,
+    "manager@ices.bj": UserRole.MANAGER,
+    "rh@ices.bj": UserRole.RESP_RH,
+    "admin@ices.bj": UserRole.ADMIN_RH,
+    "dir@ices.bj": UserRole.DIRECTION
+}
+
 class User(BaseModel):
-    id: int
+    id: str
     email: str
     full_name: str
     role: UserRole
-    department_id: Optional[int] = None
+    department_id: Optional[str] = None
 
-# In-memory user storage for ICES platform (replace with database in production)
-users_db = {
-    "admin@ices.bj": User(
-        id=1, 
-        email="admin@ices.bj", 
-        full_name="Administrateur ICES",
-        role=UserRole.ADMIN_RH
-    ),
-    "dir@ices.bj": User(
-        id=2, 
-        email="dir@ices.bj", 
-        full_name="Directeur ICES",
-        role=UserRole.DIRECTION
-    ),
-    "rh@ices.bj": User(
-        id=3, 
-        email="rh@ices.bj", 
-        full_name="Responsable RH ICES",
-        role=UserRole.RESP_RH
-    ),
-    "manager@ices.bj": User(
-        id=4, 
-        email="manager@ices.bj", 
-        full_name="Manager ICES",
-        role=UserRole.MANAGER,
-        department_id=1
-    ),
-    "collab@ices.bj": User(
-        id=5, 
-        email="collab@ices.bj", 
-        full_name="Collaborateur ICES",
-        role=UserRole.COLLABORATEUR,
-        department_id=1
-    ),
+ROLE_ALIASES = {
+    "collaborateur": "collaborateur",
+    "collab": "collaborateur",
+    "employee": "collaborateur",
+    "employé": "collaborateur",
+    "user": "collaborateur",
+    "manager": "manager",
+    "gestionnaire": "manager",
+    "direction": "direction",
+    "directeur": "direction",
+    "admin_rh": "admin_rh",
+    "admin rh": "admin_rh",
+    "admin": "admin_rh",
+    "hradmin": "admin_rh",
+    "hr admin": "admin_rh",
+    "resp_rh": "resp_rh",
+    "resp. rh": "resp_rh",
+    "resp rh": "resp_rh",
+    "responsable rh": "resp_rh",
+    "rh": "resp_rh",
+    "hrmanager": "resp_rh",
+    "hr manager": "resp_rh",
 }
 
-# Simple token-based authentication (replace with JWT in production)
-# Map token to email for database lookup
-tokens_db = {
-    "admin-token": "admin@ices.bj",
-    "direction-token": "dir@ices.bj",
-    "resp_rh-token": "rh@ices.bj",
-    "manager-token": "manager@ices.bj",
-    "collaborateur-token": "collab@ices.bj",
-}
-
-# Map user ID to email for database lookups
-user_id_to_email = {
-    1: "admin@ices.bj",
-    2: "dir@ices.bj",
-    3: "rh@ices.bj",
-    4: "manager@ices.bj",
-    5: "collab@ices.bj",
-}
+def normalize_role(role: Optional[str]) -> str:
+    if not role:
+        return "collaborateur"  # Valeur par défaut sécurisée
+    role_key = role.strip().lower()
+    return ROLE_ALIASES.get(role_key, role_key)
 
 security = HTTPBearer()
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
-    """Get current user from token"""
     token = credentials.credentials
-    
-    if token not in tokens_db:
+
+    # 1. Vérification prioritaire des identifiants de test (mode dev)
+    if token in TEST_USERS_ROLES:
+        role = TEST_USERS_ROLES[token]
+        name_part = token.split('@')[0].replace('.', ' ').title()
+        return User(
+            id=f"test-{token}",
+            email=token,
+            full_name=name_part,
+            role=role
+        )
+
+    try:
+        response = supabase.table("users").select("*").eq("token", token).limit(1).execute()
+    except ConnectError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service d'authentification temporairement indisponible. Réessayez plus tard.",
+        )
+
+    if not response.data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    email = tokens_db[token]
-    if email not in users_db:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    return users_db[email]
+
+    user_data = response.data[0]
+    user_email = user_data.get("email")
+
+    # Utilisation du rôle réel de la base de données Supabase
+    normalized_role = normalize_role(user_data.get("role"))
+    try:
+        user_role = UserRole(normalized_role)
+    except ValueError:
+        user_role = UserRole.COLLABORATEUR
+
+    return User(
+        id=user_data["id"],
+        email=user_email,
+        full_name=f"{user_data.get('prenom', '')} {user_data.get('nom', '')}".strip(),
+        role=user_role,
+    )
 
 async def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
-    """Get current user and verify admin role"""
-    if current_user.role != "admin":
+    if current_user.role not in ["admin_rh", "direction"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"

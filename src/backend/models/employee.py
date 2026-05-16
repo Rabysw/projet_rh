@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
@@ -27,14 +27,41 @@ class ProfilePicture(BaseModel):
     filename: Optional[str] = None
 
 class EmployeeBase(BaseModel):
+    model_config = ConfigDict(extra='ignore', from_attributes=True)
+    
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     email: str = Field(..., pattern=r'^[^@]+@[^@]+\.[^@]+$')
-    phone: str = Field(..., min_length=10, max_length=20)
+    phone: str = Field(..., min_length=1, max_length=20)
     department_id: Optional[int] = None
-    hr_role: HRRole
-    contract_type: ContractType
-    status: EmploymentStatus
+    hr_role: Optional[HRRole] = None
+    position: Optional[str] = None
+    contract_type: Optional[str] = None
+    status: Optional[str] = None
+    hire_date: Optional[str] = None
+    base_salary: Optional[float] = None
+    birth_date: Optional[str] = None
+    birth_place: Optional[str] = None
+    gender: Optional[str] = None
+    nationality: Optional[str] = None
+    marital_status: Optional[str] = None
+    children_count: Optional[int] = 0
+    id_card_number: Optional[str] = None
+    id_card_type: Optional[str] = None
+    id_card_expiry: Optional[str] = None
+    address: Optional[str] = None
+    personal_phone: Optional[str] = None
+    personal_email: Optional[str] = None
+    professional_phone: Optional[str] = None
+    professional_email: Optional[str] = None
+    work_location: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_relation: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    diploma: Optional[str] = None
+    contract_start: Optional[str] = None
+    contract_end: Optional[str] = None
+    manager_id: Optional[int] = None
 
 class EmployeeInput(EmployeeBase):
     pass
@@ -44,9 +71,6 @@ class Employee(EmployeeBase):
     profile_picture: Optional[ProfilePicture] = None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class EmployeeFilter(BaseModel):
     search: Optional[str] = None

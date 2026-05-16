@@ -71,6 +71,24 @@ app.include_router(projects_router, prefix="/api/v1/projects", tags=["projects"]
 from api.reports import router as reports_router
 app.include_router(reports_router, prefix="/api/v1/reports", tags=["reports"])
 
+from api.evaluations import router as evaluations_router
+app.include_router(evaluations_router, prefix="/api/v1/evaluations", tags=["evaluations"])
+
+from api.trainings import router as trainings_router
+app.include_router(trainings_router, prefix="/api/v1/trainings", tags=["trainings"])
+
+from api.career import router as career_router
+app.include_router(career_router, prefix="/api/v1/career", tags=["career"])
+
+from api.attendance import router as attendance_router
+app.include_router(attendance_router, prefix="/api/v1/attendance", tags=["attendance"])
+
+from api.notifications import router as notifications_router
+app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])
+
+from api.leave import router as leave_router
+app.include_router(leave_router, prefix="/api/v1/leave", tags=["leave"])
+
 # Documents router (Module 01)
 from api.documents import router as documents_router
 app.include_router(documents_router, prefix="/api/v1/documents", tags=["documents"])

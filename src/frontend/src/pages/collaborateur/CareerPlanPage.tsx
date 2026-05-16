@@ -1,9 +1,9 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/shared/Card";
+import { Button } from "@/components/shared/Button";
+import { Badge } from "@/components/shared/Badge";
 import { Progress } from "@/components/ui/progress";
 import { useApi, apiFetch } from "@/hooks/use-api";
-import { useIcesAuth } from "@/hooks/use-ices-auth";
+import { useIcesAuth } from "@/contexts/AuthContext";
 import { 
   TrendingUp,
   Target,

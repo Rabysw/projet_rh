@@ -1,4 +1,19 @@
 import { cn } from "@/lib/utils";
+import { 
+  CardHeader, 
+  CardTitle, 
+  CardContent, 
+  CardDescription, 
+  CardFooter 
+} from "../ui/Card";
+
+export { 
+  CardHeader, 
+  CardTitle, 
+  CardContent, 
+  CardDescription, 
+  CardFooter 
+};
 
 interface CardProps {
   children: React.ReactNode;

@@ -17,10 +17,10 @@ interface LoginResponse {
 
 const AUTH_CHANGE_EVENT = "ices-auth-change";
 
-function readAuthFromStorage(): { user: User | null; isAuthenticated: boolean } {
+function readAuthFromStorage() {
   const token = localStorage.getItem("ices_token");
   const userData = localStorage.getItem("ices_user");
-  if (token && userData) {
+  if (token && userData && userData !== "undefined") {
     try {
       return { user: JSON.parse(userData), isAuthenticated: true };
     } catch {

@@ -1,69 +1,75 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
-
-from auth.auth import User, UserRole, users_db, tokens_db, get_current_user
+from supabase_client import supabase
+from auth.auth import normalize_role
+import bcrypt
 
 router = APIRouter()
 
 class LoginRequest(BaseModel):
     email: str
-    password: str  # For demo, password is ignored
+    password: str
+
+class UserData(BaseModel):
+    id: str
+    email: str
+    full_name: str
+    role: str
 
 class LoginResponse(BaseModel):
     access_token: str
-    token_type: str
-    user: User
-
-class UserListResponse(BaseModel):
-    users: list[User]
+    token_type: str = "bearer"
+    user: UserData
 
 @router.post("/login", response_model=LoginResponse)
-async def login(login_data: LoginRequest):
-    """Login endpoint for ICES platform"""
-    email = login_data.email
-    password = login_data.password
-    
-    # Validate password
-    if password != "password123":
+def login(credentials: LoginRequest):
+    print(f"Login attempt for: {credentials.email}")
+    try:
+        response = supabase.table("users").select("*").eq("email", credentials.email).limit(1).execute()
+    except Exception as e:
+        print(f"Database connection error during login: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Le service d'authentification est temporairement indisponible. Veuillez réessayer plus tard."
+        )
+
+    if not response.data:
+        print(f"User not found: {credentials.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Mot de passe incorrect"
+            detail="Email ou mot de passe incorrect"
         )
-    
-    if email not in users_db:
+
+    user_data = response.data[0]
+    print(f"User found: {user_data['email']}")
+
+    try:
+        password_valid = bcrypt.checkpw(
+            credentials.password.encode('utf-8'),
+            user_data["password_hash"].encode('utf-8')
+        )
+        print(f"Password valid: {password_valid}")
+    except Exception as e:
+        print(f"Bcrypt error: {e}")
+        password_valid = False
+
+    if not password_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email non reconnu"
+            detail="Email ou mot de passe incorrect"
         )
-    
-    user = users_db[email]
-    
-    # Find corresponding token
-    token = None
-    for token_key, token_email in tokens_db.items():
-        if token_email == email:
-            token = token_key
-            break
-    
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erreur de configuration du token"
-        )
-    
+
+    # Log pour débugger le rôle exact en base
+    print(f"Role in DB for {user_data['email']}: '{user_data.get('role')}'")
+
     return LoginResponse(
-        access_token=token,
+        access_token=user_data["token"],
         token_type="bearer",
-        user=user
+        user=UserData(
+            id=str(user_data["id"]),
+            email=user_data["email"],
+            full_name=f"{user_data.get('prenom', '')} {user_data.get('nom', '')}".strip(),
+            role=normalize_role(user_data.get("role")),
+        )
     )
-
-@router.get("/users", response_model=UserListResponse)
-async def get_users():
-    """Get all users for demo purposes"""
-    return UserListResponse(users=list(users_db.values()))
-
-@router.get("/me")
-async def get_current_user_info(current_user: User = Depends(get_current_user)):
-    """Get current user information"""
-    return current_user

@@ -9,26 +9,9 @@ from datetime import datetime
 from io import BytesIO
 
 from auth.auth import get_current_user, User
-from data_store import rh_employees, rh_contracts, collab_leave_requests
-
-# PDF generation
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm
-
-# Excel generation
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils.dataframe import dataframe_to_rows
-import pandas as pd
+from supabase_client import supabase
 
 router = APIRouter()
-
-# ============================================
-# REPORT DATA ENDPOINTS
-# ============================================
 
 @router.get("/etat-personnel")
 def get_etat_personnel(
@@ -36,28 +19,31 @@ def get_etat_personnel(
     status: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Get employee status report data"""
-    employees = rh_employees
+    """Get employee status report data from Supabase"""
+    query = supabase.table("employees").select("*")
     
     if department_id:
-        employees = [e for e in employees if e.department_id == department_id]
+        query = query.eq("department_id", department_id)
     if status:
-        employees = [e for e in employees if e.status == status]
+        query = query.eq("status", status)
+    
+    result = query.execute()
+    employees = result.data or []
     
     return {
         "generated_at": datetime.now().isoformat(),
         "total_employees": len(employees),
         "employees": [
             {
-                "matricule": e.matricule,
-                "nom": f"{e.first_name} {e.last_name}",
-                "poste": e.position,
-                "departement": f"Département {e.department_id}" if e.department_id else "Non assigné",
-                "type_contrat": e.contract_type,
-                "date_embauche": e.hire_date,
-                "statut": e.status,
-                "email": e.professional_email,
-                "telephone": e.professional_phone
+                "matricule": e.get("matricule"),
+                "nom": f"{e.get('first_name')} {e.get('last_name')}",
+                "poste": e.get("position"),
+                "departement": f"Département {e.get('department_id')}" if e.get('department_id') else "Non assigné",
+                "type_contrat": e.get("contract_type"),
+                "date_embauche": e.get("hire_date"),
+                "statut": e.get("status"),
+                "email": e.get("professional_email"),
+                "telephone": e.get("professional_phone")
             }
             for e in employees
         ]
@@ -69,23 +55,29 @@ def get_report_conges(
     month: Optional[int] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Get leave report data"""
-    requests = collab_leave_requests
+    """Get leave report data from Supabase"""
+    query = supabase.table("leave_requests").select("*, employees(first_name, last_name)")
+    
+    # Filter by year if possible (depends on DB type, here start_date is DATE)
+    # For now we'll filter in Python if needed, or just return all
+    result = query.execute()
+    requests = result.data or []
     
     return {
         "generated_at": datetime.now().isoformat(),
         "period": f"{month}/{year}" if month else str(year),
         "total_requests": len(requests),
-        "approved": len([r for r in requests if r.status == 'approved']),
-        "pending": len([r for r in requests if r.status == 'pending']),
+        "approved": len([r for r in requests if r['status'] == 'approved']),
+        "pending": len([r for r in requests if r['status'] == 'pending']),
         "requests": [
             {
-                "id": r.id,
-                "type": r.type,
-                "date_debut": r.start,
-                "date_fin": r.end,
-                "jours": r.days,
-                "statut": r.status
+                "id": r['id'],
+                "employe": f"{r.get('employees', {}).get('first_name')} {r.get('employees', {}).get('last_name')}",
+                "type": r['leave_type'],
+                "date_debut": r['start_date'],
+                "date_fin": r['end_date'],
+                "jours": r['days'],
+                "statut": r['status']
             }
             for r in requests
         ]
@@ -96,144 +88,103 @@ def get_report_contrats(
     contract_type: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Get contracts report data"""
-    contracts = rh_contracts
+    """Get contracts report data from Supabase"""
+    query = supabase.table("employees").select("id, first_name, last_name, contract_type, contract_start, contract_end, contract_status")
+    
     if contract_type:
-        contracts = [c for c in contracts if c.type == contract_type]
+        query = query.eq("contract_type", contract_type)
+
+    result = query.execute()
+    employees = result.data or []
 
     return {
         "generated_at": datetime.now().isoformat(),
-        "total_contracts": len(contracts),
-        "active": len([c for c in contracts if c.status == 'active']),
-        "expiring_soon": len([c for c in contracts if c.alert]),
+        "total_contracts": len(employees),
+        "active": len([e for e in employees if e['contract_status'] == 'actif']),
         "contracts": [
             {
-                "id": c.id,
-                "employe": c.employee,
-                "type": c.type,
-                "debut": c.start,
-                "fin": c.end,
-                "statut": c.status,
-                "alerte": c.alert
+                "id": e['id'],
+                "employe": f"{e['first_name']} {e['last_name']}",
+                "type": e['contract_type'],
+                "debut": e['contract_start'],
+                "fin": e['contract_end'],
+                "statut": e['contract_status']
             }
-            for c in contracts
+            for e in employees
         ]
     }
 
-# ============================================
-# PDF EXPORT ENDPOINTS
-# ============================================
-
-def generate_pdf_report(title: str, headers: List[str], data: List[List], subtitle: str = ""):
-    """Helper function to generate PDF report"""
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=2*cm,
-        leftMargin=2*cm,
-        topMargin=2*cm,
-        bottomMargin=2*cm
-    )
-    
-    styles = getSampleStyleSheet()
-    elements = []
-    
-    # Title
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=16,
-        textColor=colors.HexColor('#1e3a5f'),
-        spaceAfter=20
-    )
-    elements.append(Paragraph(title, title_style))
-    
-    # Subtitle
-    if subtitle:
-        subtitle_style = ParagraphStyle(
-            'CustomSubtitle',
-            parent=styles['Normal'],
-            fontSize=10,
-            textColor=colors.grey,
-            spaceAfter=10
-        )
-        elements.append(Paragraph(f"Généré le: {subtitle}", subtitle_style))
-    
-    elements.append(Spacer(1, 20))
-    
-    # Table
-    table_data = [headers] + data
-    table = Table(table_data, repeatRows=1)
-    
-    # Table style
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3a5f')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-        ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')])
-    ]))
-    
-    elements.append(table)
-    
-    # Footer
-    elements.append(Spacer(1, 30))
-    footer_style = ParagraphStyle(
-        'Footer',
-        parent=styles['Normal'],
-        fontSize=8,
-        textColor=colors.grey,
-        alignment=1  # Center
-    )
-    elements.append(Paragraph("© ICES RH - Document confidentiel", footer_style))
-    
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer
-
-@router.get("/export/etat-personnel/pdf")
-def export_etat_personnel_pdf(
-    department_id: Optional[int] = None,
+# Update export functions to use Supabase as well
+@router.get("/export/{report_type}/{format}")
+def export_report(
+    report_type: str,
+    format: str,
     current_user: User = Depends(get_current_user)
 ):
-    """Export employee status report as PDF"""
-    employees = rh_employees
-    if department_id:
-        employees = [e for e in employees if e.department_id == department_id]
+    """Generic export endpoint for various reports"""
+    require_role(current_user, ["direction", "admin_rh", "resp_rh"])
     
-    headers = ["Matricule", "Nom", "Poste", "Département", "Contrat", "Date embauche", "Statut"]
-    data = [
-        [
-            e.matricule,
-            f"{e.first_name} {e.last_name}",
-            e.position,
-            f"Dépt {e.department_id}" if e.department_id else "N/A",
-            e.contract_type,
-            e.hire_date,
-            e.status
+    # Mapping of report types to table and logic
+    if report_type == "etat-personnel":
+        query = supabase.table("employees").select("*")
+        result = query.execute()
+        data_rows = result.data or []
+        headers = ["Matricule", "Nom", "Poste", "Département", "Contrat", "Date embauche", "Statut"]
+        data = [
+            [
+                e.get("matricule") or "-",
+                f"{e.get('first_name')} {e.get('last_name')}",
+                e.get("position") or "-",
+                f"Dépt {e.get('department_id')}" if e.get('department_id') else "N/A",
+                e.get("contract_type") or "-",
+                e.get("hire_date") or "-",
+                e.get("status") or "-"
+            ]
+            for e in data_rows
         ]
-        for e in employees
-    ]
-    
-    pdf_buffer = generate_pdf_report(
-        "État du Personnel",
-        headers,
-        data,
-        datetime.now().strftime("%d/%m/%Y %H:%M")
-    )
-    
-    return StreamingResponse(
-        pdf_buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": "attachment; filename=etat_personnel.pdf"}
-    )
+        title = "État du Personnel"
+    elif report_type == "absenteisme":
+        query = supabase.table("attendance").select("*, employees(first_name, last_name)")
+        result = query.execute()
+        data_rows = result.data or []
+        headers = ["Date", "Employé", "Arrivée", "Départ", "Statut", "Localisation"]
+        data = [
+            [
+                r.get("date"),
+                f"{r.get('employees', {}).get('first_name')} {r.get('employees', {}).get('last_name')}",
+                r.get("clock_in") or "-",
+                r.get("clock_out") or "-",
+                r.get("status"),
+                r.get("location")
+            ]
+            for r in data_rows
+        ]
+        title = "Rapport d'Absentéisme"
+    else:
+        # Placeholder for other reports
+        headers = ["Info"]
+        data = [["Données en cours de collecte pour ce module"]]
+        title = f"Rapport {report_type.replace('-', ' ').capitalize()}"
+
+    if format == "pdf":
+        pdf_buffer = generate_pdf_report(
+            title,
+            headers,
+            data,
+            datetime.now().strftime("%d/%m/%Y %H:%M")
+        )
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={report_type}.pdf"}
+        )
+    else:
+        # Default to PDF for now or implement Excel
+        raise HTTPException(status_code=400, detail="Format non supporté pour le moment")
+
+def require_role(current_user: User, allowed_roles: list):
+    if current_user.role not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
 
 @router.get("/export/conges/pdf")
 def export_conges_pdf(

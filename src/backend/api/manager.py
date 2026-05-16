@@ -1,207 +1,188 @@
 from fastapi import APIRouter, Depends, HTTPException
+from supabase_client import supabase
 from auth.auth import get_current_user, User
-from db_client import (
-    get_team_members,
-    get_team_stats,
-    get_team_leave_requests,
-    get_team_skills_stats,
-    get_projects,
-    get_kpis,
-)
-from data_store import (
-    manager_leave_requests, collab_leave_requests, TeamLeaveRequest,
-    manager_team, manager_projects, manager_kpis
-)
 from datetime import datetime
+from typing import Optional, List
 
 router = APIRouter()
 
+def require_role(current_user: User, allowed_roles: list):
+    if current_user.role not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
 
 @router.get("/team")
 def read_team(current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return get_team_members(current_user.id)
-
+    require_role(current_user, ["manager", "admin_rh", "resp_rh"])
+    
+    # Trouver l'ID employé du manager
+    mgr = supabase.table("employees").select("id").eq("user_id", current_user.id).limit(1).execute()
+    if not mgr.data:
+        return []
+    mgr_id = mgr.data[0]["id"]
+    
+    # Récupérer l'équipe
+    result = supabase.table("employees").select("*").eq("manager_id", mgr_id).execute()
+    return result.data or []
 
 @router.get("/stats")
 def read_stats(current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return get_team_stats(current_user.id)
-
+    require_role(current_user, ["manager", "admin_rh", "resp_rh"])
+    
+    mgr = supabase.table("employees").select("id").eq("user_id", current_user.id).limit(1).execute()
+    if not mgr.data:
+        return {"total": 0, "active": 0}
+    mgr_id = mgr.data[0]["id"]
+    
+    team = supabase.table("employees").select("id, status").eq("manager_id", mgr_id).execute()
+    team_data = team.data or []
+    
+    return {
+        "total": len(team_data),
+        "active": len([m for m in team_data if m.get("status") == "active"]),
+        "on_leave": len([m for m in team_data if m.get("status") == "on_leave"]),
+    }
 
 @router.get("/leaves")
 def read_leave_requests(current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return get_team_leave_requests(current_user.id)
-
+    require_role(current_user, ["manager", "admin_rh", "resp_rh"])
+    
+    mgr = supabase.table("employees").select("id").eq("user_id", current_user.id).limit(1).execute()
+    if not mgr.data:
+        return []
+    mgr_id = mgr.data[0]["id"]
+    
+    # Trouver les IDs de l'équipe
+    team = supabase.table("employees").select("id").eq("manager_id", mgr_id).execute()
+    emp_ids = [e["id"] for e in (team.data or [])]
+    
+    if not emp_ids:
+        return []
+    
+    # Récupérer leurs demandes de congés
+    requests = supabase.table("leave_requests").select("*, employees(first_name, last_name)").in_("employee_id", emp_ids).order("created_at", desc=True).execute()
+    
+    return [
+        {
+            "id": r["id"],
+            "employee": f"{r['employees']['first_name']} {r['employees']['last_name']}" if r.get("employees") else "Inconnu",
+            "type": r["leave_type"],
+            "start": r["start_date"],
+            "end": r["end_date"],
+            "days": r["days"],
+            "status": r["status"],
+            "reason": r.get("reason", "")
+        }
+        for r in (requests.data or [])
+    ]
 
 @router.post("/leaves/{leave_id}/approve")
 def approve_leave(leave_id: int, current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-
-    # 1. Update manager's list
-    leave = next((l for l in manager_leave_requests if l.id == leave_id), None)
-    if not leave:
+    require_role(current_user, ["manager", "admin_rh", "resp_rh"])
+    
+    result = supabase.table("leave_requests").update({
+        "status": "approved",
+        "manager_comment": f"Approuvé par {current_user.full_name}"
+    }).eq("id", leave_id).execute()
+    
+    if not result.data:
         raise HTTPException(status_code=404, detail="Demande non trouvée")
-    if leave.status != "pending":
-        raise HTTPException(status_code=400, detail="Cette demande a déjà été traitée")
-
-    leave.status = "approved"
-
-    # 2. ALSO update collaborator's personal list to notify them
-    collab_leave = next((l for l in collab_leave_requests if l.id == leave_id), None)
-    if collab_leave:
-        collab_leave.status = "approved"
-
+    
     return {"message": "Congé approuvé avec succès"}
 
-
 @router.post("/leaves/{leave_id}/reject")
-def reject_leave(leave_id: int, current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-
-    # 1. Update manager's list
-    leave = next((l for l in manager_leave_requests if l.id == leave_id), None)
-    if not leave:
+def reject_leave(leave_id: int, comment: str = "", current_user: User = Depends(get_current_user)):
+    require_role(current_user, ["manager", "admin_rh", "resp_rh"])
+    
+    result = supabase.table("leave_requests").update({
+        "status": "rejected",
+        "manager_comment": comment or f"Refusé par {current_user.full_name}"
+    }).eq("id", leave_id).execute()
+    
+    if not result.data:
         raise HTTPException(status_code=404, detail="Demande non trouvée")
-    if leave.status != "pending":
-        raise HTTPException(status_code=400, detail="Cette demande a déjà été traitée")
-
-    leave.status = "rejected"
-
-    # 2. ALSO update collaborator's personal list to notify them
-    collab_leave = next((l for l in collab_leave_requests if l.id == leave_id), None)
-    if collab_leave:
-        collab_leave.status = "rejected"
-
+    
     return {"message": "Congé rejeté"}
-
-
-@router.get("/skills")
-def read_skills(current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return get_team_skills_stats(current_user.id)
-
-
-@router.get("/skills/stats")
-def read_skills_stats(current_user: User = Depends(get_current_user)):
-    """Statistiques globales des compétences de l'équipe"""
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return {
-        "moyenne_equipe": 3.4,
-        "competences_critiques": 2,
-        "employes_en_formation": 3,
-        "gaps_identifies": 7
-    }
-
 
 @router.get("/skills/members")
 def read_skills_members(current_user: User = Depends(get_current_user)):
-    """Liste des membres de l'équipe avec leurs niveaux de compétences"""
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return [
-        {
-            "id": 1,
-            "nom": "Dupont Jean",
-            "poste": "Développeur",
-            "competences": [
-                {"nom": "Python", "niveau_actuel": 3, "niveau_requis": 4},
-                {"nom": "React", "niveau_actuel": 2, "niveau_requis": 3}
-            ],
-            "score_global": 68
-        },
-        {
-            "id": 2,
-            "nom": "Martin Sophie",
-            "poste": "Designer UX",
-            "competences": [
-                {"nom": "Figma", "niveau_actuel": 4, "niveau_requis": 4},
-                {"nom": "UI/UX", "niveau_actuel": 3, "niveau_requis": 3}
-            ],
-            "score_global": 85
-        }
-    ]
-
-
-@router.get("/team/leave-requests")
-def read_team_leave_requests(current_user: User = Depends(get_current_user)):
-    """Alias for /leaves"""
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return get_team_leave_requests(current_user.id)
-
-@router.get("/team/skills")
-def read_team_skills(current_user: User = Depends(get_current_user)):
-    """Alias for /skills"""
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return get_team_skills_stats(current_user.id)
+    require_role(current_user, ["manager", "admin_rh", "resp_rh"])
+    
+    mgr = supabase.table("employees").select("id").eq("user_id", current_user.id).limit(1).execute()
+    if not mgr.data:
+        return []
+    mgr_id = mgr.data[0]["id"]
+    
+    # Récupérer les employés de l'équipe
+    employees = supabase.table("employees").select("id, first_name, last_name, position").eq("manager_id", mgr_id).execute()
+    
+    if not employees.data:
+        return []
+    
+    result = []
+    for emp in employees.data:
+        skills = supabase.table("skills").select("*").eq("employee_id", emp["id"]).execute()
+        
+        competences = [
+            {
+                "nom": s["skill_name"],
+                "niveau_actuel": s.get("level", 1),
+                "niveau_requis": 5
+            }
+            for s in (skills.data or [])
+        ]
+        
+        score = round(sum(c["niveau_actuel"] for c in competences) / len(competences)) if competences else 0
+        
+        result.append({
+            "id": emp["id"],
+            "nom": f"{emp['first_name']} {emp['last_name']}",
+            "poste": emp.get("position", ""),
+            "competences": competences,
+            "score_global": score
+        })
+    
+    return result
 
 @router.get("/team/productivity")
 def read_team_productivity(current_user: User = Depends(get_current_user)):
-    """Team productivity metrics"""
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return {
-        "kpis": manager_kpis,
-        "projects": manager_projects,
-        "team_members": len(manager_team)
-    }
+    require_role(current_user, ["manager", "admin_rh", "resp_rh"])
+    
+    emp = supabase.table("employees").select("id").eq("user_id", current_user.id).limit(1).execute()
+    if not emp.data:
+        return {"kpis": [], "projects": []}
+    mgr_id = emp.data[0]["id"]
 
-@router.patch("/productivity/{indicator_id}")
-def update_productivity(indicator_id: int, data: dict, current_user: User = Depends(get_current_user)):
-    """Mise à jour d'un indicateur de productivité"""
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    # Simulation de mise à jour
-    return {"message": "Indicateur mis à jour", "id": indicator_id, "new_value": data.get("value")}
+    projects = supabase.table("projects").select("*").eq("manager_id", mgr_id).execute()
+    
+    kpis = [
+        {"label": "Taux de complétion", "current": 0, "target": 100, "unit": "%"},
+        {"label": "Projets actifs", "current": len(projects.data or []), "target": 5, "unit": ""}
+    ]
+    
+    return {
+        "kpis": kpis,
+        "projects": [
+            {
+                "id": p["id"],
+                "name": p["name"],
+                "description": p["description"],
+                "category": p["category"],
+                "status": p["status"],
+                "progress": p["progress"],
+                "deadline": p.get("end_date_scheduled"),
+            }
+            for p in (projects.data or [])
+        ]
+    }
 
 @router.get("/projects")
 def read_projects(current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return get_projects(current_user.id)
-
-@router.post("/projects")
-def create_project(project: dict, current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    # Simulation
-    return {"message": "Projet créé", "id": 999, "name": project.get("name")}
-
-@router.get("/projects/{project_id}/tasks")
-def read_project_tasks(project_id: int, current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    # For now, return mock tasks to avoid 500 if DB table is missing
-    return [
-        {"id": 1, "name": "Conception BDD", "status": "done", "assignee": "Jean"},
-        {"id": 2, "name": "Dev Frontend", "status": "in_progress", "assignee": "Sophie"},
-        {"id": 3, "name": "Tests unitaires", "status": "todo", "assignee": "Pierre"}
-    ]
-
-@router.post("/projects/{project_id}/tasks")
-def create_task(project_id: int, task: dict, current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return {"message": "Tâche ajoutée", "id": 888, "name": task.get("name")}
-
-@router.patch("/projects/tasks/{task_id}")
-def update_task_status(task_id: int, data: dict, current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return {"message": "Statut mis à jour", "id": task_id, "new_status": data.get("status")}
-
-@router.get("/kpis")
-def read_kpis(current_user: User = Depends(get_current_user)):
-    if current_user.role != "manager":
-        raise HTTPException(status_code=403, detail="Non autorisé")
-    return get_kpis(current_user.id)
+    require_role(current_user, ["manager", "admin_rh", "resp_rh"])
+    
+    emp = supabase.table("employees").select("id").eq("user_id", current_user.id).limit(1).execute()
+    if not emp.data:
+        return []
+    mgr_id = emp.data[0]["id"]
+    
+    result = supabase.table("projects").select("*").eq("manager_id", mgr_id).execute()
+    return result.data or []

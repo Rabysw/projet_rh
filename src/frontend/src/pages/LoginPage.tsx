@@ -1,8 +1,9 @@
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { useAuth } from "@/hooks/use-auth";
+import { useIcesAuth } from "@/contexts/AuthContext";
 import { useRouter } from "@tanstack/react-router";
-import { BarChart3, Shield, Star, Users } from "lucide-react";
-import { useEffect } from "react";
+import { BarChart3, Shield, Star, Users, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 const features = [
   {
@@ -28,8 +29,11 @@ const features = [
 ];
 
 export default function LoginPage() {
-  const { login, isAuthenticated, loginStatus } = useAuth();
+  const { login, isAuthenticated, loginStatus } = useIcesAuth();
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -37,8 +41,21 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, router]);
 
-  const isLoading =
-    loginStatus === "logging-in" || loginStatus === "initializing";
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      return toast.error("Veuillez remplir tous les champs");
+    }
+
+    try {
+      await login(email, password);
+      toast.success("Connexion réussie");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur de connexion");
+    }
+  };
+
+  const isLoading = loginStatus === "logging-in";
 
   return (
     <div className="min-h-screen bg-background flex" data-ocid="login.page">
@@ -113,20 +130,63 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => login()}
-            disabled={isLoading}
-            className="w-full flex items-center justify-center gap-3 rounded-xl bg-primary px-6 py-3.5 font-display font-semibold text-primary-foreground text-sm hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
-            data-ocid="login.submit_button"
-          >
-            {isLoading ? (
-              <LoadingSpinner size="sm" className="text-primary-foreground" />
-            ) : (
-              <Shield size={18} />
-            )}
-            {isLoading ? "Authentification en cours…" : "Se connecter avec Internet Identity"}
-          </button>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Adresse e-mail</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@ices.com"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-sm font-medium">Mot de passe</label>
+                <button type="button" className="text-xs text-primary hover:underline">
+                  Oublié ?
+                </button>
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full flex items-center justify-center gap-3 rounded-xl bg-primary px-6 py-3 font-display font-semibold text-primary-foreground text-sm hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+              data-ocid="login.submit_button"
+            >
+              {isLoading ? (
+                <LoadingSpinner size="sm" className="text-primary-foreground" />
+              ) : (
+                <Shield size={18} />
+              )}
+              {isLoading ? "Connexion..." : "Se connecter"}
+            </button>
+          </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
             Document confidentiel — Usage interne — Tous droits réservés.

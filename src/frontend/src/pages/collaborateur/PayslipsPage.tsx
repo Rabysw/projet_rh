@@ -1,6 +1,6 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/shared/Card";
+import { Button } from "@/components/shared/Button";
+import { Badge } from "@/components/shared/Badge";
 import { useApi } from "@/hooks/use-api";
 import { downloadFile } from "@/lib/download";
 import { toast } from "sonner";

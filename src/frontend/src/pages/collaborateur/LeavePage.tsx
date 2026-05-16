@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/shared/Card";
+import { Button } from "@/components/shared/Button";
+import { Badge } from "@/components/shared/Badge";
 import { useApi, apiFetch } from "@/hooks/use-api";
 import { useCompanyConfig } from "@/contexts/CompanyConfigContext";
 import { toast } from "sonner";
@@ -43,6 +43,7 @@ export default function LeavePage() {
     config?.leave_types?.length
       ? config.leave_types
       : ["Congé payé", "Maladie", "Sans solde", "Maternité", "Paternité", "Exceptionnel"];
+
   const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -50,7 +51,7 @@ export default function LeavePage() {
     start: "",
     end: "",
     days: 0,
-    reason: ""
+    reason: "",
   });
 
   useEffect(() => {
@@ -58,10 +59,12 @@ export default function LeavePage() {
       setFormData((prev) => ({ ...prev, type: leaveTypeOptions[0] ?? "" }));
     }
   }, [leaveTypeOptions, formData.type]);
-  
-  const { data: leaveBalance, isLoading: balanceLoading, refetch: refetchBalance } = useApi<LeaveBalance[]>("/api/v1/collaborateur/leave-balance");
-  const { data: leaveRequests, isLoading: requestsLoading, refetch: refetchRequests } = useApi<LeaveRequest[]>("/api/v1/collaborateur/leave-requests");
-  
+
+  const { data: leaveBalance, isLoading: balanceLoading, refetch: refetchBalance } =
+    useApi<LeaveBalance[]>("/api/v1/collaborateur/leave-balance");
+  const { data: leaveRequests, isLoading: requestsLoading, refetch: refetchRequests } =
+    useApi<LeaveRequest[]>("/api/v1/collaborateur/leave-requests");
+
   const isLoading = balanceLoading || requestsLoading;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,11 +73,12 @@ export default function LeavePage() {
     try {
       await apiFetch("/api/v1/collaborateur/leave-requests", {
         method: "POST",
-        body: JSON.stringify(formData)
+        body: JSON.stringify(formData),
       });
       toast.success("Demande soumise avec succès");
       setShowForm(false);
       refetchRequests();
+      refetchBalance();
     } catch (err) {
       toast.error("Erreur lors de la soumission");
     } finally {
@@ -84,10 +88,13 @@ export default function LeavePage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Mes congés — Formulaire et suivi</h1>
-          <p className="text-muted-foreground">Déposez une demande de congé et suivez l'historique de vos absences.</p>
+          <h1 className="text-3xl font-bold text-foreground">Mes congés</h1>
+          <p className="text-muted-foreground">
+            Déposez une demande de congé et suivez l'historique de vos absences.
+          </p>
         </div>
         <Button onClick={() => setShowForm(!showForm)} className="gap-2">
           <Plus className="h-4 w-4" />
@@ -101,28 +108,35 @@ export default function LeavePage() {
           <div className="col-span-3 flex justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        ) : leaveBalance?.map((leave) => {
-          const IconComp = balanceIcons[leave.type] || Calendar;
-          return (
-            <Card key={leave.type}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{leave.type}</CardTitle>
-                <IconComp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{leave.remaining}</div>
-                <p className="text-xs text-muted-foreground">jours restants sur {leave.total}</p>
-                <div className="mt-2 w-full bg-muted rounded-full h-2">
-                  <div 
-                    className="bg-primary h-2 rounded-full" 
-                    style={{ width: `${(leave.remaining / leave.total) * 100}%` }}
-                  ></div>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">{leave.used} jours utilisés</p>
-              </CardContent>
-            </Card>
-          );
-        })}
+        ) : (
+          leaveBalance?.map((leave) => {
+            const IconComp = balanceIcons[leave.type] || Calendar;
+            const pct = leave.total > 0 ? (leave.remaining / leave.total) * 100 : 0;
+            return (
+              <Card key={leave.type}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">{leave.type}</CardTitle>
+                  <IconComp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{leave.remaining}</div>
+                  <p className="text-xs text-muted-foreground">
+                    jours restants sur {leave.total}
+                  </p>
+                  <div className="mt-2 w-full bg-muted rounded-full h-2">
+                    <div
+                      className="bg-primary h-2 rounded-full transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {leave.used} jours utilisés
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
       </div>
 
       {/* Formulaire de demande */}
@@ -135,8 +149,8 @@ export default function LeavePage() {
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Type de congé</label>
-                <select 
-                  className="w-full px-3 py-2 border border-border rounded-lg"
+                <select
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
                   value={formData.type}
                   onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                 >
@@ -149,45 +163,52 @@ export default function LeavePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Date de début</label>
-                <input 
-                  type="date" 
-                  className="w-full px-3 py-2 border border-border rounded-lg"
+                <input
+                  type="date"
+                  required
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
                   value={formData.start}
                   onChange={(e) => setFormData({ ...formData, start: e.target.value })}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Date de fin</label>
-                <input 
-                  type="date" 
-                  className="w-full px-3 py-2 border border-border rounded-lg"
+                <input
+                  type="date"
+                  required
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
                   value={formData.end}
                   onChange={(e) => setFormData({ ...formData, end: e.target.value })}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Nombre de jours</label>
-                <input 
-                  type="number" 
-                  className="w-full px-3 py-2 border border-border rounded-lg" 
-                  placeholder="Auto-calculé" 
-                  value={formData.days}
-                  onChange={(e) => setFormData({ ...formData, days: parseInt(e.target.value) })}
+                <input
+                  type="number"
+                  min={1}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
+                  placeholder="Auto-calculé"
+                  value={formData.days || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, days: parseInt(e.target.value) || 0 })
+                  }
                 />
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium mb-1">Motif (optionnel)</label>
-                <textarea 
-                  className="w-full px-3 py-2 border border-border rounded-lg" 
+                <textarea
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground"
                   rows={3}
                   value={formData.reason}
                   onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                ></textarea>
+                />
               </div>
               <div className="md:col-span-2 flex gap-2 justify-end">
-                <Button variant="outline" type="button" onClick={() => setShowForm(false)}>Annuler</Button>
+                <Button variant="outline" type="button" onClick={() => setShowForm(false)}>
+                  Annuler
+                </Button>
                 <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  {isSubmitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                   Soumettre la demande
                 </Button>
               </div>
@@ -196,7 +217,7 @@ export default function LeavePage() {
         </Card>
       )}
 
-      {/* Historique des demandes */}
+      {/* Historique */}
       <Card>
         <CardHeader>
           <CardTitle>Historique des demandes</CardTitle>
@@ -207,33 +228,46 @@ export default function LeavePage() {
               <div className="flex justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : leaveRequests?.map((req) => (
-              <div key={req.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Calendar className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium text-sm">{req.type}</p>
-                    <p className="text-xs text-muted-foreground">{req.start} → {req.end} ({req.days} jours)</p>
+            ) : leaveRequests?.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                Aucune demande de congé pour le moment.
+              </p>
+            ) : (
+              leaveRequests?.map((req) => (
+                <div
+                  key={req.id}
+                  className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <Calendar className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-sm">{req.type}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {req.start} → {req.end} ({req.days} jours)
+                      </p>
+                    </div>
                   </div>
+
+                  {/* ── Badges corrigés ── */}
+                  {req.status === "approved" ? (
+                    <Badge className="gap-1 bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Approuvé
+                    </Badge>
+                  ) : req.status === "pending" ? (
+                    <Badge className="gap-1 bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 hover:bg-amber-100">
+                      <Hourglass className="h-3 w-3" />
+                      En attente
+                    </Badge>
+                  ) : (
+                    <Badge className="gap-1 bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 hover:bg-rose-100">
+                      <XCircle className="h-3 w-3" />
+                      Refusé
+                    </Badge>
+                  )}
                 </div>
-                {req.status === "approved" ? (
-                  <Badge variant="default" className="gap-1 bg-accent text-accent hover:bg-accent">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Approuvé
-                  </Badge>
-                ) : req.status === "pending" ? (
-                  <Badge variant="outline" className="gap-1 text-secondary border-secondary">
-                    <Hourglass className="h-3 w-3" />
-                    En attente
-                  </Badge>
-                ) : (
-                  <Badge variant="destructive" className="gap-1">
-                    <XCircle className="h-3 w-3" />
-                    Refusé
-                  </Badge>
-                )}
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

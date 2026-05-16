@@ -1,7 +1,6 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
-import { Progress } from "@/components/ui/progress";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/shared/Card";
+import { Button } from "@/components/shared/Button";
+import { Badge } from "@/components/shared/Badge";
 import { useApi } from "@/hooks/use-api";
 import { 
   Award, 
@@ -19,16 +18,19 @@ interface TeamSkillStat {
 }
 
 interface MemberSkill {
-  name: string;
-  role: string;
-  skills: number;
-  certifications: number;
-  gaps: string[];
-  performance: number;
+  id: number;
+  nom: string;
+  poste: string;
+  competences: {
+    nom: string;
+    niveau_actuel: number;
+    niveau_requis: number;
+  }[];
+  score_global: number;
 }
 
 export default function TeamSkillsPage() {
-  const { data: teamSkills, isLoading } = useApi<TeamSkillStat[]>("/api/v1/manager/skills/stats");
+  const { data: teamSkills, isLoading } = useApi<TeamSkillStat[]>("/api/v1/manager/skills");
   const { data: memberSkills } = useApi<MemberSkill[]>("/api/v1/manager/skills/members");
 
   if (isLoading) {
@@ -38,6 +40,7 @@ export default function TeamSkillsPage() {
       </div>
     );
   }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -56,7 +59,9 @@ export default function TeamSkillsPage() {
             <Zap className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">86</div>
+            <div className="text-2xl font-bold">
+              {Array.isArray(teamSkills) ? teamSkills.reduce((acc, s) => acc + s.total, 0) : 0}
+            </div>
             <p className="text-xs text-muted-foreground">dans l'équipe</p>
           </CardContent>
         </Card>
@@ -66,8 +71,10 @@ export default function TeamSkillsPage() {
             <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">24</div>
-            <p className="text-xs text-muted-foreground">28% du total</p>
+            <div className="text-2xl font-bold">
+              {Array.isArray(teamSkills) ? teamSkills.reduce((acc, s) => acc + s.certified, 0) : 0}
+            </div>
+            <p className="text-xs text-muted-foreground">au total</p>
           </CardContent>
         </Card>
         <Card>
@@ -76,7 +83,9 @@ export default function TeamSkillsPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">15</div>
+            <div className="text-2xl font-bold">
+              {Array.isArray(teamSkills) ? teamSkills.reduce((acc, s) => acc + s.in_progress, 0) : 0}
+            </div>
             <p className="text-xs text-muted-foreground">cette année</p>
           </CardContent>
         </Card>
@@ -92,33 +101,37 @@ export default function TeamSkillsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {teamSkills?.map((skill) => (
-              <div key={skill.skill} className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">{skill.skill}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {skill.certified}/{skill.total} certifiés
-                  </span>
+            {Array.isArray(teamSkills) && teamSkills.length > 0 ? (
+              teamSkills.map((skill) => (
+                <div key={skill.skill} className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">{skill.skill}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {skill.certified}/{skill.total} certifiés
+                    </span>
+                  </div>
+                  <div className="flex gap-1">
+                    {Array.from({ length: skill.total }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-2 flex-1 rounded-full ${
+                          i < skill.certified ? 'bg-accent' :
+                          i < skill.certified + skill.in_progress ? 'bg-secondary' :
+                          'bg-muted'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex gap-2 text-xs">
+                    <span className="text-accent">{skill.certified} certifiés</span>
+                    <span className="text-secondary">{skill.in_progress} en cours</span>
+                    <span className="text-muted-foreground">{skill.total - skill.certified - skill.in_progress} à former</span>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  {Array.from({ length: skill.total }).map((_, i) => (
-                    <div 
-                      key={i} 
-                      className={`h-2 flex-1 rounded-full ${
-                        i < skill.certified ? 'bg-accent' : 
-                        i < skill.certified + skill.in_progress ? 'bg-secondary' : 
-                        'bg-muted'
-                      }`}
-                    />
-                  ))}
-                </div>
-                <div className="flex gap-2 text-xs">
-                  <span className="text-accent">{skill.certified} certifiés</span>
-                  <span className="text-secondary">{skill.in_progress} en cours</span>
-                  <span className="text-muted-foreground">{skill.total - skill.certified - skill.in_progress} à former</span>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-6">Aucune donnée disponible</p>
+            )}
           </CardContent>
         </Card>
 
@@ -131,45 +144,58 @@ export default function TeamSkillsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {memberSkills?.map((member) => (
-              <div key={member.name} className="p-3 bg-muted/30 rounded-lg space-y-2">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                      {member.name.charAt(0)}
+            {Array.isArray(memberSkills) && memberSkills.length > 0 ? (
+              memberSkills.map((member) => {
+                // Compétences où niveau_actuel < niveau_requis = gaps
+                const gaps = (member.competences || []).filter(
+                  (c) => c.niveau_actuel < c.niveau_requis
+                );
+
+                return (
+                  <div key={member.id} className="p-3 bg-muted/30 rounded-lg space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                          {(member.nom || "?").charAt(0)}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">{member.nom || "Inconnu"}</p>
+                          <p className="text-xs text-muted-foreground">{member.poste || ""}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium">{member.score_global ?? 0}%</p>
+                        <p className="text-xs text-muted-foreground">score</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium">{member.name}</p>
-                      <p className="text-xs text-muted-foreground">{member.role}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium">{member.performance}%</p>
-                    <p className="text-xs text-muted-foreground">perf.</p>
-                  </div>
-                </div>
-                
-                {member.gaps.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    <span className="text-xs text-muted-foreground">Gaps:</span>
-                    {member.gaps.map((gap) => (
-                      <Badge key={gap} variant="outline" className="text-xs text-destructive border-destructive">
-                        {gap}
+
+                    {gaps.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        <span className="text-xs text-muted-foreground">Gaps:</span>
+                        {gaps.map((gap) => (
+                          <Badge key={gap.nom} variant="outline" className="text-xs text-destructive border-destructive">
+                            {gap.nom}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <Badge className="bg-green-100 text-green-800 text-xs">
+                        Compétences complètes
                       </Badge>
-                    ))}
+                    )}
+
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{(member.competences || []).length} compétences</span>
+                      <span>
+                        {(member.competences || []).filter(c => c.niveau_actuel >= c.niveau_requis).length} maîtrisées
+                      </span>
+                    </div>
                   </div>
-                ) : (
-                  <Badge variant="default" className="bg-accent text-accent text-xs">
-                    Compétences complètes
-                  </Badge>
-                )}
-                
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{member.skills} compétences</span>
-                  <span>{member.certifications} certifiées</span>
-                </div>
-              </div>
-            ))}
+                );
+              })
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-6">Aucune donnée disponible</p>
+            )}
           </CardContent>
         </Card>
       </div>

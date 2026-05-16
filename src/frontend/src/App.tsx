@@ -14,16 +14,21 @@ import { Suspense, lazy } from "react";
 // Lazy pages
 const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
 const EmployeesPage = lazy(() => import("@/pages/resp_rh/EmployeesPage"));
+const NewEmployeePage = lazy(() => import("@/pages/NewEmployeePage"));
+const EditEmployeePage = lazy(() => import("@/pages/EditEmployeePage"));
 const EmployeeDetailPage = lazy(() => import("@/pages/resp_rh/EmployeeDetailPage"));
 const AttendancePage = lazy(() => import("@/pages/resp_rh/AttendancePage"));
 const ContractsPage = lazy(() => import("@/pages/resp_rh/ContractsPage"));
+const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage"));
 
 // Collaborateur pages
 const ProfilePage = lazy(() => import("@/pages/collaborateur/ProfilePage"));
 const LeavePage = lazy(() => import("@/pages/collaborateur/LeavePage"));
+const PresencesPage = lazy(() => import("@/pages/collaborateur/Presencespage"));
 const PayslipsPage = lazy(() => import("@/pages/collaborateur/PayslipsPage"));
 const TrainingsPage = lazy(() => import("@/pages/collaborateur/TrainingsPage"));
 const SkillsPage = lazy(() => import("@/pages/collaborateur/SkillsPage"));
+const EvaluationsPage = lazy(() => import("@/pages/EvaluationsPage"));
 const CareerPlanPage = lazy(() => import("@/pages/collaborateur/CareerPlanPage"));
 const SuggestionsPage = lazy(() => import("@/pages/collaborateur/SuggestionsPage"));
 
@@ -33,6 +38,9 @@ const TeamLeavePage = lazy(() => import("@/pages/manager/TeamLeavePage"));
 const TeamSkillsPage = lazy(() => import("@/pages/manager/TeamSkillsPage"));
 const TeamProductivityPage = lazy(() => import("@/pages/manager/TeamProductivityPage"));
 const KanbanPage = lazy(() => import("@/pages/manager/KanbanPage"));
+const TeamTrainingsPage = lazy(() => import("@/pages/manager/TeamTrainingsPage"));
+const TeamNotificationsPage = lazy(() => import("@/pages/manager/TeamNotificationsPage"));
+const TeamReportsPage = lazy(() => import("@/pages/manager/TeamReportsPage"));
 
 // Communication pages
 const CommunicationPage = lazy(() => import("@/pages/communication/CommunicationPage"));
@@ -48,7 +56,11 @@ const AdminConfigPage = lazy(() => import("@/pages/admin_rh/ConfigPage"));
 // Direction pages
 const DirectionReportsPage = lazy(() => import("@/pages/direction/ReportsPage"));
 
-import { CompanyConfigProvider, useCompanyConfig } from "@/contexts/CompanyConfigContext";
+// Setup page
+const SetupPage = lazy(() => import("@/pages/admin/SetupPage"));
+
+import { CompanyConfigProvider } from "@/contexts/CompanyConfigContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 function PageLoader() {
   return (
@@ -58,7 +70,52 @@ function PageLoader() {
   );
 }
 
-const SetupPage = lazy(() => import("@/pages/admin/SetupPage"));
+// ─── Role Guard ───────────────────────────────────────────────────────────────
+
+function RoleGuard({
+  allowed,
+  children,
+}: {
+  allowed: string[];
+  children: React.ReactNode;
+}) {
+  const rawUser = localStorage.getItem("ices_user");
+  const user = rawUser ? JSON.parse(rawUser) : null;
+  const role = user?.role ?? "";
+
+  if (!allowed.includes(role)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-center px-4">
+        <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-8 w-8 text-destructive"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+            />
+          </svg>
+        </div>
+        <div>
+          <p className="text-xl font-bold text-destructive">Accès refusé (403)</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Vous n'avez pas les permissions nécessaires pour accéder à cette page.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+// ─── Bootstrap ────────────────────────────────────────────────────────────────
 
 type StoredUser = {
   role?: string;
@@ -67,41 +124,48 @@ type StoredUser = {
 async function readBootstrapState() {
   const token = localStorage.getItem("ices_token");
   const rawUser = localStorage.getItem("ices_user");
-  const user: StoredUser | null = rawUser ? JSON.parse(rawUser) : null;
+  const user: StoredUser | null = (rawUser && rawUser !== "undefined")
+    ? JSON.parse(rawUser)
+    : null;
   const role = user?.role ?? "";
 
   if (!token) {
     return { isAuthenticated: false, role, isConfigured: false };
   }
 
-  // Only admin-like users need setup bootstrap
   if (!["admin_rh", "resp_rh"].includes(role)) {
     return { isAuthenticated: true, role, isConfigured: true };
   }
 
-  const response = await fetch("/api/v1/admin/company-config", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  try {
+    const response = await fetch("/api/v1/admin/company-config", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-  if (!response.ok) {
-    // Fail-open for non-ready backend, fail-closed only for explicit null
-    return { isAuthenticated: true, role, isConfigured: true };
+    if (!response.ok) {
+      return { isAuthenticated: true, role, isConfigured: false };
+    }
+
+    const data = await response.json();
+    const forceSetup = localStorage.getItem("force_setup") === "true";
+    const isConfigured = !forceSetup && !!(
+      data &&
+      data.company_name &&
+      data.company_name.trim() !== ""
+    );
+
+    return { isAuthenticated: true, role, isConfigured };
+  } catch {
+    return { isAuthenticated: true, role, isConfigured: false };
   }
-
-  const data = await response.json();
-  return {
-    isAuthenticated: true,
-    role,
-    isConfigured: !!(data && data.company_name),
-  };
 }
 
-// Root route
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
 const rootRoute = createRootRoute({
   component: Outlet,
 });
 
-// Login route
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
@@ -115,6 +179,16 @@ const loginRoute = createRoute({
       throw redirect({ to: "/" });
     }
   },
+});
+
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/forgot-password",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <ForgotPasswordPage />
+    </Suspense>
+  ),
 });
 
 const setupRoute = createRoute({
@@ -136,7 +210,6 @@ const setupRoute = createRoute({
   },
 });
 
-// Protected layout route
 const protectedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "protected",
@@ -152,7 +225,6 @@ const protectedRoute = createRoute({
   },
 });
 
-// Dashboard
 const dashboardRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/",
@@ -163,13 +235,32 @@ const dashboardRoute = createRoute({
   ),
 });
 
-// Employees list
 const rhEmployeesRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/rh-employees",
   component: () => (
     <Suspense fallback={<PageLoader />}>
       <EmployeesPage />
+    </Suspense>
+  ),
+});
+
+const newEmployeeRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/rh-employees/new",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <NewEmployeePage />
+    </Suspense>
+  ),
+});
+
+const editEmployeeRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/rh-employees/$id/edit",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <EditEmployeePage />
     </Suspense>
   ),
 });
@@ -194,10 +285,33 @@ const rhContractsRoute = createRoute({
   ),
 });
 
-// Employee detail
+const rhCongesRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/rh-conges",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["resp_rh", "admin_rh"]}>
+        <div className="p-6">Module Congés RH (En cours de développement)</div>
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const enquetesRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/enquetes",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["resp_rh", "admin_rh"]}>
+        <div className="p-6">Module Enquêtes (En cours de développement)</div>
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
 const employeeDetailRoute = createRoute({
   getParentRoute: () => protectedRoute,
-  path: "/employees/$id",
+  path: "/rh-employees/$id",
   component: () => (
     <Suspense fallback={<PageLoader />}>
       <EmployeeDetailPage />
@@ -205,7 +319,6 @@ const employeeDetailRoute = createRoute({
   ),
 });
 
-// Collaborateur routes
 const profileRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/profile",
@@ -222,6 +335,18 @@ const leaveRoute = createRoute({
   component: () => (
     <Suspense fallback={<PageLoader />}>
       <LeavePage />
+    </Suspense>
+  ),
+});
+
+const presencesRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/presences",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["collaborateur", "manager", "resp_rh", "admin_rh"]}>
+        <PresencesPage />
+      </RoleGuard>
     </Suspense>
   ),
 });
@@ -286,7 +411,6 @@ const communicationRoute = createRoute({
   ),
 });
 
-// Manager routes
 const teamRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/team",
@@ -337,10 +461,54 @@ const kanbanRoute = createRoute({
   ),
 });
 
-// Resp RH routes
-// rhEmployeesRoute and rhContractsRoute are declared above
+const evaluationsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/evaluations",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["collaborateur", "manager", "resp_rh", "admin_rh"]}>
+        <EvaluationsPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
 
-// Admin routes
+const teamTrainingsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/team-trainings",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["manager", "admin_rh"]}>
+        <TeamTrainingsPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const teamNotificationsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/team-notifications",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["manager", "admin_rh"]}>
+        <TeamNotificationsPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const teamReportsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/team-reports",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["manager", "admin_rh"]}>
+        <TeamReportsPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
 const adminUsersRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/admin-users",
@@ -356,32 +524,50 @@ const adminConfigRoute = createRoute({
   path: "/admin/configuration",
   component: () => (
     <Suspense fallback={<PageLoader />}>
-      <AdminConfigPage />
+      <RoleGuard allowed={["admin_rh"]}>
+        <AdminConfigPage />
+      </RoleGuard>
     </Suspense>
   ),
 });
 
-// Direction routes
 const directionReportsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/direction-reports",
   component: () => (
     <Suspense fallback={<PageLoader />}>
-      <DirectionReportsPage />
+      <RoleGuard allowed={["direction", "admin_rh"]}>
+        <DirectionReportsPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const genericReportsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/reports",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["admin_rh", "resp_rh", "direction"]}>
+        <DirectionReportsPage />
+      </RoleGuard>
     </Suspense>
   ),
 });
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  forgotPasswordRoute,
   setupRoute,
   protectedRoute.addChildren([
     dashboardRoute,
     profileRoute,
     leaveRoute,
+    presencesRoute,
     payslipsRoute,
     trainingsRoute,
     skillsRoute,
+    evaluationsRoute,
     careerPlanRoute,
     suggestionsRoute,
     communicationRoute,
@@ -390,13 +576,21 @@ const routeTree = rootRoute.addChildren([
     teamSkillsRoute,
     teamProductivityRoute,
     kanbanRoute,
+    teamTrainingsRoute,
+    teamNotificationsRoute,
+    teamReportsRoute,
     rhEmployeesRoute,
+    newEmployeeRoute,
+    editEmployeeRoute,
     rhAttendanceRoute,
     rhContractsRoute,
+    rhCongesRoute,
+    enquetesRoute,
     employeeDetailRoute,
     adminUsersRoute,
     adminConfigRoute,
     directionReportsRoute,
+    genericReportsRoute,
   ]),
 ]);
 
@@ -410,8 +604,10 @@ declare module "@tanstack/react-router" {
 
 export default function App() {
   return (
-    <CompanyConfigProvider>
-      <RouterProvider router={router} />
-    </CompanyConfigProvider>
+    <AuthProvider>
+      <CompanyConfigProvider>
+        <RouterProvider router={router} />
+      </CompanyConfigProvider>
+    </AuthProvider>
   );
 }

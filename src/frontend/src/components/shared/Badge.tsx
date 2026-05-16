@@ -7,12 +7,15 @@ type BadgeVariant =
   | "warning"
   | "danger"
   | "info"
-  | "secondary";
+  | "secondary"
+  | "outline"
+  | "destructive";
 
 interface BadgeProps {
   variant?: BadgeVariant;
   children: React.ReactNode;
   className?: string;
+  onClick?: () => void;
 }
 
 const variantClasses: Record<BadgeVariant, string> = {
@@ -22,23 +25,29 @@ const variantClasses: Record<BadgeVariant, string> = {
   danger: "bg-destructive/15 text-destructive",
   info: "bg-accent/15 text-accent",
   secondary: "bg-secondary/15 text-secondary",
+  outline: "border border-border text-muted-foreground",
+  destructive: "bg-destructive/15 text-destructive",
 };
 
 export function Badge({
   variant = "default",
   children,
   className,
+  onClick,
 }: BadgeProps) {
+  const Tag = onClick ? "button" : "span";
   return (
-    <span
+    <Tag
+      onClick={onClick}
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold",
         variantClasses[variant],
+        onClick && "cursor-pointer hover:bg-muted/80 transition-colors",
         className,
       )}
     >
       {children}
-    </span>
+    </Tag>
   );
 }
 

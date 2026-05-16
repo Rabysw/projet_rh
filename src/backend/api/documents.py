@@ -10,6 +10,7 @@ from io import BytesIO
 
 from auth.auth import get_current_user, User
 from data_store import rh_employees, collab_payslips
+from supabase_client import supabase
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -332,10 +333,12 @@ def download_payslip(payslip_id: int, current_user: User = Depends(get_current_u
         raise HTTPException(status_code=404, detail="Bulletin non trouvé")
 
     employee = next((e for e in rh_employees if e.id == current_user.id), None)
-    if not employee and current_user.role not in ["admin_rh", "resp_rh"]:
+    if not employee and current_user.role.lower() not in ["admin_rh", "resp_rh"]:
         raise HTTPException(status_code=403, detail="Accès refusé")
 
-    pdf_buffer = generate_payslip_pdf((employee.model_dump() if employee else {}), payslip.model_dump())
+    # Si l'utilisateur est RH/Admin et n'est pas dans rh_employees, on crée un objet minimal pour éviter le crash
+    emp_data = employee.model_dump() if employee else {"first_name": "Admin", "last_name": "ICES", "matricule": "ADMIN", "position": "RH", "hire_date": "N/A"}
+    pdf_buffer = generate_payslip_pdf(emp_data, payslip.model_dump())
     filename = f"bulletin_{payslip.month.replace(' ', '_')}.pdf"
 
     return StreamingResponse(
@@ -359,7 +362,7 @@ def generate_contract(
 ):
     """Generate employment contract PDF"""
     # Check authorization
-    if current_user.role not in ["admin_rh", "resp_rh"]:
+    if current_user.role.lower() not in ["admin_rh", "resp_rh"]:
         raise HTTPException(status_code=403, detail="Accès réservé aux RH")
     
     employee = next((e for e in rh_employees if e.id == employee_id), None)
@@ -395,7 +398,7 @@ def generate_certificate(
         raise HTTPException(status_code=404, detail="Employé non trouvé")
 
     # Check authorization - employee can request their own, RH can request any
-    if current_user.role not in ["admin_rh", "resp_rh"] and current_user.id != employee_id:
+    if current_user.role.lower() not in ["admin_rh", "resp_rh"] and current_user.id != employee_id:
         raise HTTPException(status_code=403, detail="Vous ne pouvez générer que vos propres certificats")
     
     # Generate PDF
@@ -411,7 +414,7 @@ def generate_certificate(
 
 
 @router.post("/upload")
-def upload_document(
+async def upload_document(
     file: UploadFile = File(...),
     document_type: str = "contract",  # contract, certificate, payslip, other
     employee_id: Optional[int] = None,
@@ -419,19 +422,64 @@ def upload_document(
 ):
     """Upload a document to employee file"""
     # Check authorization
-    if current_user.role not in ["admin_rh", "resp_rh"] and current_user.id != employee_id:
+    if current_user.role.lower() not in ["admin_rh", "resp_rh"] and (employee_id is not None and current_user.id != employee_id):
         raise HTTPException(status_code=403, detail="Accès non autorisé")
     
-    # In production, save to file storage (S3, local disk, etc.)
-    # For now, return success
-    return {
-        "message": "Document uploadé avec succès",
-        "filename": file.filename,
-        "type": document_type,
-        "employee_id": employee_id,
-        "uploaded_at": datetime.now().isoformat(),
-        "uploaded_by": current_user.email
-    }
+    if employee_id is None:
+        raise HTTPException(status_code=400, detail="ID employé requis")
+
+    try:
+        # 1. Read file content
+        content = await file.read()
+        file_ext = file.filename.split(".")[-1]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_path = f"employee_{employee_id}/{document_type}_{timestamp}.{file_ext}"
+
+        # 2. Upload to Supabase Storage (bucket 'documents')
+        # Ensure the bucket exists (this might fail if it already exists, so we wrap it)
+        try:
+            supabase.storage.create_bucket("documents", options={"public": True})
+        except:
+            pass
+
+        res = supabase.storage.from_("documents").upload(
+            path=file_path,
+            file=content,
+            file_options={"content-type": file.content_type}
+        )
+
+        # 3. Get public URL
+        file_url = supabase.storage.from_("documents").get_public_url(file_path)
+
+        # 4. Save to database
+        # We try to save to employee_documents table if it exists
+        try:
+            doc_data = {
+                "employee_id": employee_id,
+                "document_type": document_type,
+                "file_url": file_url,
+                "file_name": file.filename
+            }
+            supabase.table("employee_documents").insert(doc_data).execute()
+        except Exception as e:
+            # Fallback: if it's a contract, try to update the employees table
+            if document_type == "contract":
+                try:
+                    supabase.table("employees").update({"contract_url": file_url}).eq("id", employee_id).execute()
+                except:
+                    print(f"Failed to update employee contract_url: {e}")
+            print(f"Database insertion failed but file was uploaded: {e}")
+
+        return {
+            "message": "Document uploadé avec succès",
+            "filename": file.filename,
+            "url": file_url,
+            "type": document_type,
+            "employee_id": employee_id,
+            "uploaded_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur lors du téléchargement : {str(e)}")
 
 
 @router.get("/employee/{employee_id}")
@@ -441,30 +489,21 @@ def get_employee_documents(
 ):
     """Get list of documents for an employee"""
     # Check authorization
-    if current_user.role not in ["admin_rh", "resp_rh"] and current_user.id != employee_id:
+    if current_user.role.lower() not in ["admin_rh", "resp_rh"] and current_user.id != employee_id:
         raise HTTPException(status_code=403, detail="Accès non autorisé")
     
-    # In production, query document database
-    # For now, return mock data
-    return {
-        "employee_id": employee_id,
-        "documents": [
-            {
-                "id": 1,
-                "type": "contract",
-                "name": "Contrat de travail",
-                "uploaded_at": "2024-03-15T10:00:00",
-                "status": "active"
-            },
-            {
-                "id": 2,
-                "type": "payslip",
-                "name": "Fiche de paie - Mai 2024",
-                "uploaded_at": "2024-05-31T15:00:00",
-                "status": "archived"
-            }
-        ]
-    }
+    try:
+        result = supabase.table("employee_documents").select("*").eq("employee_id", employee_id).order("uploaded_at", desc=True).execute()
+        return {
+            "employee_id": employee_id,
+            "documents": result.data or []
+        }
+    except Exception:
+        # Fallback if table doesn't exist
+        return {
+            "employee_id": employee_id,
+            "documents": []
+        }
 
 @router.post("/generate/avenant")
 def generate_avenant(
@@ -473,7 +512,7 @@ def generate_avenant(
     current_user: User = Depends(get_current_user)
 ):
     """Generate a contract amendment (Avenant)"""
-    if current_user.role not in ["admin_rh", "resp_rh"]:
+    if current_user.role.lower() not in ["admin_rh", "resp_rh"]:
         raise HTTPException(status_code=403, detail="Accès réservé aux RH")
 
     employee = next((e for e in rh_employees if e.id == employee_id), None)

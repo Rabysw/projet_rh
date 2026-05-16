@@ -1,149 +1,147 @@
-from datetime import datetime
-from typing import Any, List, Optional
-
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from typing import Optional, List
+from datetime import datetime
 
-from auth.auth import User, get_current_user
+from auth.auth import get_current_user, User
 from supabase_client import supabase
 
 router = APIRouter()
 
-
-class PublicHoliday(BaseModel):
-    date: str
-    label: str
-
-
+# Pydantic models for CompanyConfig
 class CompanyConfigBase(BaseModel):
     company_name: str
-    company_logo_url: Optional[str] = None
     primary_color: str
-    country: str
-    currency: str
-    phone_prefix: str
-    timezone: str
-    working_days: List[str]
-    working_hours_start: str
-    working_hours_end: str
-    overtime_threshold_hours: float
-    leave_days_per_year: float
-    leave_carry_over_max: float
-    probation_duration_days: int
-    contract_alert_days: int
-    id_expiry_alert_days: int
-    medical_alert_days: int
-    late_alert_threshold_minutes: int
-    late_count_alert_per_month: int
-    public_holidays: List[PublicHoliday] = Field(default_factory=list)
-    departments: List[str] = Field(default_factory=list)
-    job_titles: List[str] = Field(default_factory=list)
-    leave_types: List[str] = Field(default_factory=list)
-
-
-class CompanyConfigCreate(CompanyConfigBase):
-    pass
-
-
-class CompanyConfigUpdate(BaseModel):
-    company_name: Optional[str] = None
     company_logo_url: Optional[str] = None
-    primary_color: Optional[str] = None
-    country: Optional[str] = None
-    currency: Optional[str] = None
-    phone_prefix: Optional[str] = None
-    timezone: Optional[str] = None
-    working_days: Optional[List[str]] = None
-    working_hours_start: Optional[str] = None
-    working_hours_end: Optional[str] = None
-    overtime_threshold_hours: Optional[float] = None
-    leave_days_per_year: Optional[float] = None
-    leave_carry_over_max: Optional[float] = None
-    probation_duration_days: Optional[int] = None
-    contract_alert_days: Optional[int] = None
-    id_expiry_alert_days: Optional[int] = None
-    medical_alert_days: Optional[int] = None
-    late_alert_threshold_minutes: Optional[int] = None
-    late_count_alert_per_month: Optional[int] = None
-    public_holidays: Optional[List[PublicHoliday]] = None
-    departments: Optional[List[str]] = None
-    job_titles: Optional[List[str]] = None
-    leave_types: Optional[List[str]] = None
+    country: Optional[str] = "Bénin"
+    currency: Optional[str] = "XOF"
+    phone_prefix: Optional[str] = "+229"
+    timezone: Optional[str] = "Africa/Porto-Novo"
+    fiscal_id: Optional[str] = None
+    legal_structure: Optional[str] = None
+    working_days: Optional[List[str]] = ["Lun", "Mar", "Mer", "Jeu", "Ven"]
+    working_hours_start: Optional[str] = "08:00:00"
+    working_hours_end: Optional[str] = "17:00:00"
+    break_duration_minutes: Optional[int] = 60
+    leave_days_per_year: Optional[int] = 24
+    leave_carry_over_max: Optional[int] = 5
+    leave_types: Optional[List[str]] = ["Congés payés", "Maladie", "Maternité", "Exceptionnel"]
+    probation_duration_days: Optional[int] = 90
+    contract_alert_days: Optional[int] = 30
+    id_expiry_alert_days: Optional[int] = 60
+    medical_alert_days: Optional[int] = 30
+    overtime_threshold_hours: Optional[int] = 8
+    late_alert_threshold_minutes: Optional[int] = 15
+    late_count_alert_per_month: Optional[int] = 3
 
+class CompanyConfigSetup(CompanyConfigBase):
+    departments: List[str]
+    job_titles: List[str]
+    public_holidays: List[dict]
 
-def _check_admin_access(current_user: User) -> None:
-    if current_user.role not in ["admin_rh", "resp_rh"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Accès réservé aux administrateurs RH",
+class CompanyConfigInDB(CompanyConfigBase):
+    id: int = 1
+    is_setup: bool = False
+    public_holidays: Optional[List[dict]] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+# ✅ GET sans authentification
+@router.get("/company-config", response_model=CompanyConfigInDB)
+def get_company_config():
+    """Récupère la configuration de l'entreprise avec fallback en cas d'erreur réseau"""
+    try:
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+            
+        response = supabase.table("company_config").select("*").eq("id", 1).limit(1).execute()
+        config_data = response.data
+        
+        if not config_data:
+            return CompanyConfigInDB(
+                company_name="ICES BJ",
+                primary_color="#3b82f6",
+                id=1
+            )
+        return CompanyConfigInDB(**config_data[0])
+    except Exception as e:
+        print(f"CRITICAL ERROR: Failed to fetch company config: {e}")
+        # Return fallback configuration instead of 500 error to keep the app running
+        return CompanyConfigInDB(
+            company_name="ICES BJ (Mode Dégradé)",
+            primary_color="#3b82f6",
+            id=1
         )
 
-
-def _normalize_record(record: dict[str, Any]) -> dict[str, Any]:
-    # Ensure time fields are serialized for JSON consumers
-    for key in ("working_hours_start", "working_hours_end"):
-        value = record.get(key)
-        if value is not None:
-            record[key] = str(value)
-    return record
-
-
-@router.get("/company-config")
-async def get_company_config(current_user: User = Depends(get_current_user)):
-    _check_admin_access(current_user)
-    response = supabase.table("company_config").select("*").limit(1).execute()
-    if not response.data:
-        return None
-    return _normalize_record(response.data[0])
-
-
-@router.post("/company-config")
-async def create_company_config(
-    payload: CompanyConfigCreate, current_user: User = Depends(get_current_user)
+@router.post("/company-config", response_model=CompanyConfigInDB)
+def set_company_config(
+    config: CompanyConfigBase,
+    current_user: User = Depends(get_current_user)
 ):
-    _check_admin_access(current_user)
-
-    existing = supabase.table("company_config").select("id").limit(1).execute()
-    if existing.data:
+    if current_user.role not in ["admin_rh", "direction"]:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="La configuration entreprise existe déjà",
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Seul l'Admin RH ou la Direction peut configurer les paramètres"
         )
 
-    now = datetime.utcnow().isoformat()
-    data = payload.model_dump()
-    data["id"] = 1
-    data["created_at"] = now
-    data["updated_at"] = now
+    try:
+        data_to_upsert = config.dict(exclude_unset=True)
+        data_to_upsert["id"] = 1
+        data_to_upsert["updated_at"] = datetime.now().isoformat()
 
-    result = supabase.table("company_config").insert(data).execute()
-    if not result.data:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erreur de création de la configuration",
-        )
-    return _normalize_record(result.data[0])
+        response = supabase.table("company_config").upsert(data_to_upsert, on_conflict="id").execute()
 
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Échec de la sauvegarde de la configuration")
 
-@router.patch("/company-config")
-async def update_company_config(
-    payload: CompanyConfigUpdate, current_user: User = Depends(get_current_user)
+        return CompanyConfigInDB(**response.data[0])
+    except Exception as e:
+        print(f"Error saving company config: {e}")
+        raise HTTPException(status_code=503, detail=f"Service indisponible (Base de données) : {str(e)}")
+
+@router.post("/company-config/setup", response_model=CompanyConfigInDB)
+def setup_company_config(
+    config: CompanyConfigSetup,
+    current_user: User = Depends(get_current_user)
 ):
-    _check_admin_access(current_user)
-
-    updates = payload.model_dump(exclude_unset=True)
-    if not updates:
+    if current_user.role not in ["admin_rh", "direction"]:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Aucune modification fournie",
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Seul l'Admin RH ou la Direction peut effectuer la configuration initiale"
         )
-    updates["updated_at"] = datetime.utcnow().isoformat()
 
-    result = supabase.table("company_config").update(updates).eq("id", 1).execute()
-    if not result.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Configuration entreprise introuvable",
-        )
-    return _normalize_record(result.data[0])
+    try:
+        # 1. Handle Departments
+        if config.departments:
+            dept_data = [{"name": d} for d in config.departments]
+            supabase.table("departments").upsert(dept_data, on_conflict="name").execute()
 
+        # 2. Handle Job Titles
+        if config.job_titles:
+            jobs_data = [{"name": j} for j in config.job_titles]
+            supabase.table("job_titles").upsert(jobs_data, on_conflict="name").execute()
+
+        # 3. Handle Public Holidays
+        if config.public_holidays:
+            # Expected format: [{"date": "2025-01-01", "name": "Jour de l'An"}]
+            supabase.table("public_holidays").upsert(config.public_holidays, on_conflict="date").execute()
+
+        # 4. Handle Company Config
+        config_dict = config.dict(exclude_unset=True)
+        # Remove lists that don't belong in company_config table
+        if "departments" in config_dict: del config_dict["departments"]
+        if "job_titles" in config_dict: del config_dict["job_titles"]
+        
+        config_dict["id"] = 1
+        config_dict["is_setup"] = True
+        config_dict["updated_at"] = datetime.now().isoformat()
+
+        response = supabase.table("company_config").upsert(config_dict, on_conflict="id").execute()
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Échec de la configuration de l'entreprise")
+
+        return CompanyConfigInDB(**response.data[0])
+    except Exception as e:
+        print(f"Error during company setup: {e}")
+        raise HTTPException(status_code=503, detail=f"Erreur lors de la configuration : {str(e)}")

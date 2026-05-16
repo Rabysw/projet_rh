@@ -44,7 +44,7 @@ function validateEmail(email: string) {
 }
 
 export default function EditEmployeePage() {
-  const { id } = useParams({ from: "/protected/employees/$id/edit" });
+  const { id } = useParams({ from: "/protected/rh-employees/$id/edit" });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,7 +72,18 @@ export default function EditEmployeePage() {
     hr_role: HRRole.Employee,
     contract_type: ContractType.CDI,
     status: EmploymentStatus.Active,
-    department_id: undefined,
+    department_id: 0,
+    birth_date: "",
+    birth_place: "",
+    nationality: "",
+    gender: "",
+    id_card_number: "",
+    id_card_type: "",
+    hire_date: "",
+    position: "",
+    contract_start: "",
+    professional_email: "",
+    base_salary: 0,
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -84,11 +95,22 @@ export default function EditEmployeePage() {
         first_name: employee.first_name,
         last_name: employee.last_name,
         email: employee.email,
-        phone: employee.phone,
+        phone: employee.phone || "",
         hr_role: employee.hr_role,
-        contract_type: employee.contract_type,
+        contract_type: employee.contract_type as ContractType,
         status: employee.status,
         department_id: employee.department_id,
+        birth_date: employee.birth_date,
+        birth_place: employee.birth_place,
+        nationality: employee.nationality,
+        gender: employee.gender,
+        id_card_number: employee.id_card_number,
+        id_card_type: employee.id_card_type,
+        hire_date: employee.hire_date,
+        position: employee.position,
+        contract_start: employee.contract_start,
+        professional_email: employee.professional_email,
+        base_salary: employee.base_salary,
       });
       if (employee.profile_picture) {
         setAvatarPreview(employee.profile_picture.url);
@@ -159,7 +181,7 @@ export default function EditEmployeePage() {
       toast.success("Collaborateur mis à jour avec succès");
       queryClient.invalidateQueries({ queryKey: ["employee", id] });
       queryClient.invalidateQueries({ queryKey: ["employees"] });
-      navigate({ to: "/employees/$id", params: { id: String(id) } });
+      navigate({ to: "/rh-employees/$id", params: { id: String(id) } });
     },
     onError: (err: Error) => toast.error(`Échec de la mise à jour : ${err.message}`)
   });
@@ -196,7 +218,7 @@ export default function EditEmployeePage() {
         title={`Modifier : ${employee.first_name} ${employee.last_name}`}
         subtitle="Mettre à jour les détails du collaborateur"
         action={
-          <Link to="/employees/$id" params={{ id: String(id) }}>
+          <Link to="/rh-employees/$id" params={{ id: String(id) }}>
             <Button variant="ghost" icon={<ArrowLeft size={15} />} size="sm">
               Retour
             </Button>
@@ -393,12 +415,13 @@ export default function EditEmployeePage() {
                 onChange={(e) =>
                   set(
                     "department_id",
-                    e.target.value ? Number(e.target.value) : undefined,
+                    e.target.value ? Number(e.target.value) : 0,
                   )
                 }
                 className={inputClass}
+                data-ocid="edit_employee.department_select"
               >
-                <option value="">Aucun département</option>
+                <option value={0}>Sélectionner un département</option>
                 {departments?.map((d) => (
                   <option key={String(d.id)} value={String(d.id)}>
                     {d.name}
@@ -410,8 +433,12 @@ export default function EditEmployeePage() {
         </div>
 
         <div className="flex justify-end gap-3 mt-5">
-          <Link to="/employees/$id" params={{ id: String(id) }}>
-            <Button type="button" variant="outline">
+          <Link to="/rh-employees/$id" params={{ id: String(id) }}>
+            <Button
+              type="button"
+              variant="ghost"
+              data-ocid="edit_employee.cancel_button"
+            >
               Annuler
             </Button>
           </Link>

@@ -1,8 +1,10 @@
-import { useIcesAuth } from "@/hooks/use-ices-auth";
+import { useIcesAuth } from "@/contexts/AuthContext";
 import { useApi } from "@/hooks/use-api";
 import { useCompanyConfig } from "@/contexts/CompanyConfigContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/shared/Card";
+import { Button } from "@/components/shared/Button";
+import { downloadFile } from "@/lib/download";
+import { toast } from "sonner";
 import { 
   TrendingUp, 
   Users, 
@@ -41,6 +43,16 @@ export default function DirectionDashboard() {
     formations_realisees: "0/0",
     satisfaction: "0/5",
     suggestions_traitees: "0%"
+  };
+
+  const handleExport = async (type: string, format: "pdf" | "excel" = "pdf") => {
+    try {
+      const filename = `${type}_${new Date().toISOString().split('T')[0]}.${format}`;
+      await downloadFile(`/reports/export/${type}/${format}`, filename);
+      toast.success("Rapport généré avec succès");
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de la génération du rapport");
+    }
   };
 
   return (
@@ -252,35 +264,35 @@ export default function DirectionDashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Button variant="outline" className="h-16 flex-col gap-1">
+            <Button variant="outline" className="h-16 flex-col gap-1" onClick={() => handleExport("etat-personnel")}>
               <FileText className="h-5 w-5" />
               <span className="text-xs">Bilan social</span>
             </Button>
-            <Button variant="outline" className="h-16 flex-col gap-1">
+            <Button variant="outline" className="h-16 flex-col gap-1" onClick={() => handleExport("competences")}>
               <TrendingUp className="h-5 w-5" />
               <span className="text-xs">Rapport compétences</span>
             </Button>
-            <Button variant="outline" className="h-16 flex-col gap-1">
+            <Button variant="outline" className="h-16 flex-col gap-1" onClick={() => handleExport("absenteisme")}>
               <Calendar className="h-5 w-5" />
               <span className="text-xs">Rapport absentéisme</span>
             </Button>
-            <Button variant="outline" className="h-16 flex-col gap-1">
+            <Button variant="outline" className="h-16 flex-col gap-1" onClick={() => handleExport("formations")}>
               <BookOpen className="h-5 w-5" />
               <span className="text-xs">Rapport formations</span>
             </Button>
-            <Button variant="outline" className="h-16 flex-col gap-1">
+            <Button variant="outline" className="h-16 flex-col gap-1" onClick={() => handleExport("satisfaction")}>
               <Smile className="h-5 w-5" />
               <span className="text-xs">Rapport satisfaction</span>
             </Button>
-            <Button variant="outline" className="h-16 flex-col gap-1">
+            <Button variant="outline" className="h-16 flex-col gap-1" onClick={() => handleExport("turnover")}>
               <Activity className="h-5 w-5" />
               <span className="text-xs">Rapport turnover</span>
             </Button>
-            <Button variant="outline" className="h-16 flex-col gap-1">
+            <Button variant="outline" className="h-16 flex-col gap-1" onClick={() => handleExport("productivite")}>
               <BarChart3 className="h-5 w-5" />
               <span className="text-xs">Rapport productivité</span>
             </Button>
-            <Button variant="outline" className="h-16 flex-col gap-1">
+            <Button variant="outline" className="h-16 flex-col gap-1" onClick={() => handleExport("etats-legaux")}>
               <Gavel className="h-5 w-5" />
               <span className="text-xs">États légaux ({config?.country || "Pays"})</span>
             </Button>

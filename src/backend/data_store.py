@@ -523,28 +523,28 @@ rh_contracts: List[Contract] = []
 # ==================== ADMIN RH ====================
 
 admin_users = [
-    SystemUser(id=1, name="Admin Principal", email="admin@ices.bj", role="Admin RH", status="active", last_login="Aujourd'hui"),
-    SystemUser(id=2, name="Marie Laurent", email="marie@ices.bj", role="Collaborateur", status="active", last_login="Aujourd'hui"),
-    SystemUser(id=3, name="Jean Dupont", email="jean@ices.bj", role="Manager", status="active", last_login="Hier"),
-    SystemUser(id=4, name="Sophie Bernard", email="sophie@ices.bj", role="Resp. RH", status="active", last_login="Il y a 2 jours"),
-    SystemUser(id=5, name="Pierre Martin", email="pierre@ices.bj", role="Direction", status="active", last_login="Il y a 3 jours"),
-    SystemUser(id=6, name="Ancien Collab", email="ancien@ices.bj", role="Collaborateur", status="inactive", last_login="Il y a 45 jours"),
+    SystemUser(id=1, name="Admin Principal", email="admin@ices.bj", role="admin_rh", status="active", last_login="Aujourd'hui"),
+    SystemUser(id=2, name="Marie Laurent", email="marie@ices.bj", role="collaborateur", status="active", last_login="Aujourd'hui"),
+    SystemUser(id=3, name="Jean Dupont", email="jean@ices.bj", role="manager", status="active", last_login="Hier"),
+    SystemUser(id=4, name="Sophie Bernard", email="sophie@ices.bj", role="resp_rh", status="active", last_login="Il y a 2 jours"),
+    SystemUser(id=5, name="Pierre Martin", email="pierre@ices.bj", role="direction", status="active", last_login="Il y a 3 jours"),
+    SystemUser(id=6, name="Ancien Collab", email="ancien@ices.bj", role="collaborateur", status="inactive", last_login="Il y a 45 jours"),
 ]
 
 admin_roles = [
-    RoleStat(role="Direction", count=8, color="bg-purple-100 text-purple-800"),
-    RoleStat(role="Admin RH", count=15, color="bg-blue-100 text-blue-800"),
-    RoleStat(role="Resp. RH", count=12, color="bg-green-100 text-green-800"),
-    RoleStat(role="Manager", count=25, color="bg-orange-100 text-orange-800"),
-    RoleStat(role="Collaborateur", count=364, color="bg-gray-100 text-gray-800"),
+    RoleStat(role="direction", count=8, color="bg-purple-100 text-purple-800"),
+    RoleStat(role="admin_rh", count=15, color="bg-blue-100 text-blue-800"),
+    RoleStat(role="resp_rh", count=12, color="bg-green-100 text-green-800"),
+    RoleStat(role="manager", count=25, color="bg-orange-100 text-orange-800"),
+    RoleStat(role="collaborateur", count=364, color="bg-gray-100 text-gray-800"),
 ]
 
 admin_permissions = [
-    Permission(module="Dossiers personnel", roles=["Admin", "Resp RH", "Manager"]),
-    Permission(module="Contrats", roles=["Admin", "Resp RH"]),
-    Permission(module="Congés", roles=["Admin", "Resp RH", "Manager", "Collab"]),
-    Permission(module="Fiches de paie", roles=["Admin", "Resp RH", "Collab"]),
-    Permission(module="Admin système", roles=["Admin"]),
+    Permission(module="Dossiers personnel", roles=["admin_rh", "resp_rh", "manager"]),
+    Permission(module="Contrats", roles=["admin_rh", "resp_rh"]),
+    Permission(module="Congés", roles=["admin_rh", "resp_rh", "manager", "collaborateur"]),
+    Permission(module="Fiches de paie", roles=["admin_rh", "resp_rh", "collaborateur"]),
+    Permission(module="Admin système", roles=["admin_rh"]),
 ]
 
 admin_logs = [

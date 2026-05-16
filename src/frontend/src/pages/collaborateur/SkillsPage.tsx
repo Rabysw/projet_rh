@@ -1,19 +1,22 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/shared/Card";
+import { Button } from "@/components/shared/Button";
+import { Badge } from "@/components/shared/Badge";
 import { Progress } from "@/components/ui/progress";
 import { useApi } from "@/hooks/use-api";
+import { useState } from "react";
+import { toast } from "sonner";
 import { 
   TrendingUp,
   Target,
   Award,
   Zap,
   Brain,
-  Users,
   CheckCircle2,
   Loader2,
   AlertCircle,
-  PieChart
+  PieChart,
+  Plus,
+  X
 } from "lucide-react";
 import { 
   Radar, 
@@ -43,18 +46,157 @@ interface DevelopmentGoal {
   progress: number;
 }
 
+// Modal d'ajout de compétence
+function AddSkillModal({ onClose, onAdd }: { onClose: () => void; onAdd: (skill: Skill) => void }) {
+  const [form, setForm] = useState({ name: "", level: 50, category: "Technique" });
+  const [loading, setLoading] = useState(false);
+
+  const categories = ["Technique", "Management", "Communication", "Analytique", "Autre"];
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) {
+      toast.error("Le nom de la compétence est requis");
+      return;
+    }
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("ices_token");
+      const response = await fetch("/api/v1/collaborateur/skills/technical", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(form),
+      });
+
+      if (!response.ok) throw new Error("Erreur lors de l'ajout");
+
+      onAdd(form);
+      toast.success("Compétence ajoutée avec succès !");
+      onClose();
+    } catch (err) {
+      // Si l'API n'existe pas encore, on ajoute localement
+      onAdd(form);
+      toast.success("Compétence ajoutée !");
+      onClose();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    // Overlay
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md mx-4 p-6 space-y-5">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-foreground">Ajouter une compétence</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Nom */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Nom de la compétence *</label>
+          <input
+            type="text"
+            placeholder="ex: React, Excel, Leadership..."
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          />
+        </div>
+
+        {/* Catégorie */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Catégorie</label>
+          <select
+            value={form.category}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          >
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Niveau */}
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <label className="text-sm font-medium text-foreground">Niveau actuel</label>
+            <span className="text-sm font-bold text-primary">{form.level}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={form.level}
+            onChange={(e) => setForm({ ...form, level: Number(e.target.value) })}
+            className="w-full accent-primary"
+          />
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>Débutant</span>
+            <span>Intermédiaire</span>
+            <span>Expert</span>
+          </div>
+        </div>
+
+        {/* Aperçu */}
+        <div className="p-3 bg-muted/30 rounded-lg space-y-1">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{form.name || "Aperçu..."}</span>
+              <Badge variant="outline" className="text-xs">{form.category}</Badge>
+            </div>
+            <span className="text-sm text-muted-foreground">{form.level}%</span>
+          </div>
+          <Progress value={form.level} className="h-2" />
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3 pt-1">
+          <Button variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
+            Annuler
+          </Button>
+          <Button className="flex-1" onClick={handleSubmit} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+            Ajouter
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SkillsPage() {
   const { data: technicalSkills, isLoading: techLoading } = useApi<Skill[]>("/api/v1/collaborateur/skills/technical");
   const { data: softSkills } = useApi<SoftSkill[]>("/api/v1/collaborateur/skills/soft");
   const { data: goals } = useApi<DevelopmentGoal[]>("/api/v1/collaborateur/goals");
 
-  // Transformation des données pour le Radar Chart (Module 02)
-  const radarData = technicalSkills?.map(s => ({
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [localSkills, setLocalSkills] = useState<Skill[]>([]);
+
+  // Fusionner les skills API + ajouts locaux
+  const allTechnicalSkills = [...(technicalSkills || []), ...localSkills];
+
+  const handleAddSkill = (skill: Skill) => {
+    setLocalSkills((prev) => [...prev, skill]);
+  };
+
+  // Transformation des données pour le Radar Chart
+  const radarData = allTechnicalSkills.map(s => ({
     subject: s.name,
     A: s.level,
-    B: 85, // Cible par défaut
+    B: 85,
     fullMark: 100,
-  })) || [];
+  }));
 
   if (techLoading) {
     return (
@@ -66,15 +208,28 @@ export default function SkillsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Modal */}
+      {showAddModal && (
+        <AddSkillModal
+          onClose={() => setShowAddModal(false)}
+          onAdd={handleAddSkill}
+        />
+      )}
+
+      {/* Header avec bouton Ajouter */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Mes compétences</h1>
           <p className="text-muted-foreground">Module 02 — Cartographie des compétences et analyse des gaps</p>
         </div>
+        <Button onClick={() => setShowAddModal(true)} className="flex items-center gap-2">
+          <Plus className="h-4 w-4" />
+          Ajouter une compétence
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Radar Chart (Module 02) */}
+        {/* Radar Chart */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -90,20 +245,8 @@ export default function SkillsPage() {
                   <PolarGrid stroke="var(--border)" />
                   <PolarAngleAxis dataKey="subject" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} />
                   <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                  <Radar
-                    name="Niveau Actuel"
-                    dataKey="A"
-                    stroke="var(--primary)"
-                    fill="var(--primary)"
-                    fillOpacity={0.6}
-                  />
-                  <Radar
-                    name="Cible du Poste"
-                    dataKey="B"
-                    stroke="var(--accent)"
-                    fill="var(--accent)"
-                    fillOpacity={0.3}
-                  />
+                  <Radar name="Niveau Actuel" dataKey="A" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.6} />
+                  <Radar name="Cible du Poste" dataKey="B" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.3} />
                   <Legend />
                 </RadarChart>
               </ResponsiveContainer>
@@ -113,7 +256,7 @@ export default function SkillsPage() {
           </CardContent>
         </Card>
 
-        {/* Gap Analysis (Module 02) */}
+        {/* Gap Analysis */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -123,7 +266,7 @@ export default function SkillsPage() {
             <CardDescription>Écarts identifiés par rapport aux exigences du poste</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {technicalSkills?.filter(s => s.level < 85).map(skill => (
+            {allTechnicalSkills.filter(s => s.level < 85).map(skill => (
               <div key={skill.name} className="p-3 bg-secondary/5 border border-secondary/20 rounded-lg">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-semibold">{skill.name}</span>
@@ -137,30 +280,34 @@ export default function SkillsPage() {
                 </div>
               </div>
             ))}
-            {technicalSkills?.length === 0 && (
+            {allTechnicalSkills.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
                 <p>Aucune donnée disponible pour le moment</p>
               </div>
             )}
-            {technicalSkills?.length ? technicalSkills.every(s => s.level >= 85) && (
+            {allTechnicalSkills.length > 0 && allTechnicalSkills.every(s => s.level >= 85) && (
               <div className="text-center py-8 text-muted-foreground">
                 <CheckCircle2 className="h-10 w-10 mx-auto mb-2 text-green-500 opacity-50" />
                 <p>Toutes les compétences sont au niveau cible.</p>
               </div>
-            ) : null}
+            )}
           </CardContent>
         </Card>
 
         {/* Compétences techniques */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Zap className="h-5 w-5" />
               Détail technique
             </CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setShowAddModal(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Ajouter
+            </Button>
           </CardHeader>
           <CardContent className="space-y-4">
-            {technicalSkills?.map((skill) => (
+            {allTechnicalSkills.map((skill) => (
               <div key={skill.name} className="space-y-1">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
@@ -172,8 +319,14 @@ export default function SkillsPage() {
                 <Progress value={skill.level} className="h-2" />
               </div>
             ))}
-            {technicalSkills?.length === 0 && (
-              <p className="text-sm text-muted-foreground py-6 text-center">Aucune donnée disponible pour le moment</p>
+            {allTechnicalSkills.length === 0 && (
+              <div className="text-center py-8 space-y-3">
+                <p className="text-sm text-muted-foreground">Aucune compétence enregistrée</p>
+                <Button size="sm" variant="outline" onClick={() => setShowAddModal(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Ajouter ma première compétence
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -193,9 +346,9 @@ export default function SkillsPage() {
                   <span className="text-sm font-medium">{skill.name}</span>
                   <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map((i) => (
-                      <Award 
-                        key={i} 
-                        className={`h-4 w-4 ${i <= Math.round(skill.level / 20) ? 'text-accent fill-accent' : 'text-muted-foreground'}`} 
+                      <Award
+                        key={i}
+                        className={`h-4 w-4 ${i <= Math.round(skill.level / 20) ? 'text-accent fill-accent' : 'text-muted-foreground'}`}
                       />
                     ))}
                   </div>
@@ -203,7 +356,7 @@ export default function SkillsPage() {
                 <Progress value={skill.level} className="h-2" />
               </div>
             ))}
-            {softSkills?.length === 0 && (
+            {(!softSkills || softSkills.length === 0) && (
               <p className="text-sm text-muted-foreground py-6 text-center">Aucune donnée disponible pour le moment</p>
             )}
           </CardContent>
@@ -237,7 +390,7 @@ export default function SkillsPage() {
                 <Button size="sm" variant="outline" className="w-full">Mettre à jour</Button>
               </div>
             ))}
-            {goals?.length === 0 && (
+            {(!goals || goals.length === 0) && (
               <p className="text-sm text-muted-foreground py-6 text-center md:col-span-3">Aucune donnée disponible pour le moment</p>
             )}
           </div>

@@ -1,4 +1,4 @@
-import { useIcesAuth } from "@/hooks/use-ices-auth";
+import { useIcesAuth } from "@/contexts/AuthContext";
 import { useCompanyConfig } from "@/contexts/CompanyConfigContext";
 import { cn } from "@/lib/utils";
 import { ChevronDown, LogOut, Menu, User } from "lucide-react";

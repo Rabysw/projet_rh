@@ -1,5 +1,5 @@
 import { HRRole } from "@/types";
-import { useIcesAuth } from "./use-ices-auth";
+import { useIcesAuth } from "@/contexts/AuthContext";
 
 export function useRole() {
   const { user } = useIcesAuth();

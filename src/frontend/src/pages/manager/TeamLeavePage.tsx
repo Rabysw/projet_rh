@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/shared/Card";
+import { Button } from "@/components/shared/Button";
+import { Badge } from "@/components/shared/Badge";
 import { useApi, apiFetch } from "@/hooks/use-api";
 import { toast } from "sonner";
 import { 
@@ -211,10 +211,19 @@ export default function TeamLeavePage() {
                       </Button>
                     </>
                   ) : (
-                    <Badge className={`${request.status === 'approved' ? 'bg-accent text-accent' : 'bg-destructive text-destructive'} hover:bg-opacity-90 gap-1`}>
-                      <CheckCircle2 className="h-3 w-3" />
-                      {request.status === 'approved' ? 'Approuvée' : 'Refusée'}
-                    </Badge>
+                    <Badge className={`${request.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} gap-1`}>
+                    {request.status === 'approved' ? (
+                      <>
+                        <CheckCircle2 className="h-3 w-3" />
+                        Approuvée
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-3 w-3" />
+                        Refusée
+                      </>
+                    )}
+                  </Badge>
                   )}
                 </div>
               </div>

@@ -15,7 +15,7 @@ declare global {
 
 const queryClient = new QueryClient();
 
-// Module 11 — PWA : Enregistrement du Service Worker
+// PWA : Enregistrement du Service Worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').then(registration => {

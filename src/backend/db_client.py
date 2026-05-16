@@ -14,8 +14,38 @@ from data_store import (
 
 # Manager data access
 
-def get_team_members(manager_id: int):
-    return manager_team
+def get_team_members(manager_id: str):
+    from supabase_client import supabase
+    
+    # Trouver le département du manager
+    manager_emp = supabase.table("employees").select("id, department").eq("user_id", str(manager_id)).limit(1).execute()
+    if not manager_emp.data:
+        return manager_team  # fallback mock
+    
+    dept = manager_emp.data[0].get("department")
+    if not dept:
+        return manager_team  # fallback mock
+    
+    # Récupérer les employés du même département
+    response = supabase.table("employees").select(
+        "id, first_name, last_name, position, professional_email, status, department"
+    ).eq("department", dept).execute()
+    
+    if not response.data:
+        return manager_team  # fallback mock
+    
+    return [
+        {
+            "id": e["id"],
+            "name": f"{e['first_name']} {e['last_name']}",
+            "role": e.get("position", ""),
+            "email": e.get("professional_email", ""),
+            "status": e.get("status", "active"),
+            "skills": [],
+            "performance": 0,
+        }
+        for e in response.data
+    ]
 
 
 def get_team_stats(manager_id: int):

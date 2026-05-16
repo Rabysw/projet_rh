@@ -127,12 +127,18 @@ def get_admin_rh_dashboard_data():
 # ==================== DIRECTION ====================
 
 def get_direction_dashboard_data():
-    employees = supabase.table("employees").select("id").execute().data
+    employees_resp = supabase.table("employees").select("id, status").execute()
+    employees = employees_resp.data
     reports = supabase.table("reports").select("*").execute().data
+    
+    total_count = len(employees)
+    active_count = sum(1 for e in employees if e.get('status') == 'active')
+    
     return {
         "kpis": [],
         "kpis_strategiques": {
-            "effectif_total": 424,
+            "effectif_total": total_count,
+            "actifs": active_count,
             "taux_turnover": 4.2,
             "taux_presence": 97,
             "formations_realises": 18,

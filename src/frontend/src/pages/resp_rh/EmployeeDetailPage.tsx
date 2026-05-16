@@ -1,7 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
-import { useApi } from "@/hooks/use-api";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/shared/Card";
+import { Button } from "@/components/shared/Button";
+import { Badge } from "@/components/shared/Badge";
+import { useApi, apiFetch } from "@/hooks/use-api";
 import { 
   User, 
   Mail, 
@@ -20,9 +20,13 @@ import {
   Users,
   CreditCard,
   Map,
-  Fingerprint
+  Fingerprint,
+  Upload,
+  CheckCircle2
 } from "lucide-react";
 import { useNavigate, useParams } from "@tanstack/react-router";
+import { useState, useRef } from "react";
+import { toast } from "sonner";
 
 interface EmployeeDetail {
   id: number;
@@ -58,9 +62,66 @@ interface EmployeeDetail {
 }
 
 export default function EmployeeDetailPage() {
-  const { id } = useParams({ from: '/protected/employees/$id' });
+  const { id } = useParams({ from: '/protected/rh-employees/$id' });
   const navigate = useNavigate();
-  const { data: employee, isLoading, error } = useApi<EmployeeDetail>(`/api/v1/resp-rh/employees/${id}`);
+  const { data: employee, isLoading, error, refetch: refetchEmployee } = useApi<EmployeeDetail>(`/api/v1/resp-rh/employees/${id}`);
+  
+  const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const { data: documentsData, refetch: refetchDocs } = useApi<{ documents: any[] }>(`/api/v1/documents/employee/${id}`);
+  const documents = documentsData?.documents || [];
+
+  const handleUploadClick = (docType: string) => {
+    setUploadingDoc(docType);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !uploadingDoc) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("document_type", uploadingDoc);
+    formData.append("employee_id", id.toString());
+
+    try {
+      await apiFetch("/api/v1/documents/upload", {
+        method: "POST",
+        body: formData,
+      });
+      toast.success(`${uploadingDoc} uploadé avec succès`);
+      refetchDocs();
+      if (uploadingDoc === "contract") refetchEmployee();
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de l'upload");
+    } finally {
+      setUploadingDoc(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const getDocStatus = (docName: string) => {
+    const typeMap: Record<string, string> = {
+      'Contrat de travail': 'contract',
+      'CIP / CNI': 'id_card',
+      'Passeport': 'passport',
+      'Diplômes': 'diploma',
+      'Certificat de travail': 'work_certificate',
+      'Attestation résidence': 'residence_cert',
+      'Casier judiciaire': 'criminal_record',
+      'Certificat médical': 'medical_cert',
+      'Photo identité': 'photo',
+      'RIB': 'rib',
+      'Relevé CNSS': 'cnss',
+      'Fiche IFU': 'ifu',
+      'Avenants': 'avenant'
+    };
+    const type = typeMap[docName];
+    const doc = documents.find(d => d.document_type === type);
+    return doc ? { status: 'OK', url: doc.file_url } : { status: 'Manquant', url: null };
+  };
 
   if (isLoading) {
     return (
@@ -81,6 +142,12 @@ export default function EmployeeDetailPage() {
 
   return (
     <div className="space-y-6">
+      <input
+        type="file"
+        className="hidden"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+      />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate({ to: '/rh-employees' })}>
@@ -154,12 +221,12 @@ export default function EmployeeDetailPage() {
                     <User size={16} className="text-primary" /> État Civil & Identité
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="Sexe" value={employee.gender || "M"} />
-                    <Field label="Nationalité" value={employee.nationality || "Béninoise"} />
-                    <Field label="Né(e) le" value={employee.birth_date} />
-                    <Field label="À" value={employee.birth_place || "Cotonou"} />
-                    <Field label="Pièce ID" value={employee.id_type || "CIP"} />
-                    <Field label="Expire le" value={employee.id_expiry || "12/12/2028"} />
+                    <Field label="Sexe" value={employee.gender || "—"} />
+                    <Field label="Nationalité" value={employee.nationality || "—"} />
+                    <Field label="Né(e) le" value={employee.birth_date || "—"} />
+                    <Field label="À" value={employee.birth_place || "—"} />
+                    <Field label="Pièce ID" value={employee.id_type || "—"} />
+                    <Field label="Expire le" value={employee.id_expiry || "—"} />
                   </div>
                 </div>
 
@@ -169,11 +236,11 @@ export default function EmployeeDetailPage() {
                     <Heart size={16} className="text-rose-500" /> Situation Familiale
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="Statut" value={employee.marital_status || "Marié(e)"} />
-                    <Field label="Enfants" value={employee.children_count?.toString() || "2"} />
-                    <Field label="Contact Urgence" value={employee.emergency_contact || "Jean Dupont"} />
-                    <Field label="Relation" value={employee.emergency_relation || "Frère"} />
-                    <Field label="Tél Urgence" value={employee.emergency_phone || "+229 97 00 00 00"} />
+                    <Field label="Statut" value={employee.marital_status || "—"} />
+                    <Field label="Enfants" value={employee.children_count?.toString() || "0"} />
+                    <Field label="Contact Urgence" value={employee.emergency_contact || "—"} />
+                    <Field label="Relation" value={employee.emergency_relation || "—"} />
+                    <Field label="Tél Urgence" value={employee.emergency_phone || "—"} />
                   </div>
                 </div>
 
@@ -183,10 +250,10 @@ export default function EmployeeDetailPage() {
                     <MapPin size={16} className="text-accent" /> Coordonnées
                   </h3>
                   <div className="space-y-3">
-                    <Field label="Email Pro" value={employee.email} />
-                    <Field label="Email Perso" value={employee.personal_email || "perso@mail.com"} />
-                    <Field label="Téléphone" value={employee.phone} />
-                    <Field label="Adresse" value={employee.address} />
+                    <Field label="Email Pro" value={employee.email || "—"} />
+                    <Field label="Email Perso" value={employee.personal_email || "—"} />
+                    <Field label="Téléphone" value={employee.phone || "—"} />
+                    <Field label="Adresse" value={employee.address || "—"} />
                   </div>
                 </div>
 
@@ -196,12 +263,12 @@ export default function EmployeeDetailPage() {
                     <CreditCard size={16} className="text-emerald-500" /> Carrière & Finance
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="Poste" value={employee.role} />
-                    <Field label="Département" value={employee.dept} />
-                    <Field label="Manager" value={employee.manager || "Sophie Martin"} />
-                    <Field label="Entrée le" value={employee.hired} />
-                    <Field label="Salaire Base" value={employee.salary_base || "450 000 FCFA"} />
-                    <Field label="RIB" value={employee.bank_account || "BJ062 01001 1234567890 12"} />
+                    <Field label="Poste" value={employee.role || "—"} />
+                    <Field label="Département" value={employee.dept || "—"} />
+                    <Field label="Manager" value={employee.manager || "—"} />
+                    <Field label="Entrée le" value={employee.hired || "—"} />
+                    <Field label="Salaire Base" value={employee.salary_base ? `${employee.salary_base} FCFA` : "—"} />
+                    <Field label="RIB" value={employee.bank_account || "—"} />
                   </div>
                 </div>
               </div>
@@ -223,12 +290,65 @@ export default function EmployeeDetailPage() {
                   'Certificat de travail', 'Attestation résidence', 'Casier judiciaire',
                   'Certificat médical', 'Photo identité', 'RIB', 'Relevé CNSS',
                   'Fiche IFU', 'Avenants'
-                ].map(doc => (
-                  <div key={doc} className="flex items-center justify-between p-2 bg-muted/30 rounded border border-border/50">
-                    <span className="text-xs truncate">{doc}</span>
-                    <Badge className="h-4 px-1 text-[8px] bg-emerald-500">OK</Badge>
-                  </div>
-                ))}
+                ].map(docName => {
+                  const { status, url } = getDocStatus(docName);
+                  const typeMap: Record<string, string> = {
+                    'Contrat de travail': 'contract',
+                    'CIP / CNI': 'id_card',
+                    'Passeport': 'passport',
+                    'Diplômes': 'diploma',
+                    'Certificat de travail': 'work_certificate',
+                    'Attestation résidence': 'residence_cert',
+                    'Casier judiciaire': 'criminal_record',
+                    'Certificat médical': 'medical_cert',
+                    'Photo identité': 'photo',
+                    'RIB': 'rib',
+                    'Relevé CNSS': 'cnss',
+                    'Fiche IFU': 'ifu',
+                    'Avenants': 'avenant'
+                  };
+                  const docType = typeMap[docName];
+                  
+                  return (
+                    <div key={docName} className="flex items-center justify-between p-2 bg-muted/30 rounded border border-border/50 group">
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs truncate font-medium">{docName}</span>
+                        <span className={`text-[10px] ${status === 'OK' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                          {status}
+                        </span>
+                      </div>
+                      <div className="flex gap-1">
+                        {url ? (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6 text-primary"
+                            onClick={() => window.open(url, "_blank")}
+                          >
+                            <Download className="h-3 w-3" />
+                          </Button>
+                        ) : (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6 text-muted-foreground hover:text-primary"
+                            onClick={() => handleUploadClick(docType)}
+                            disabled={uploadingDoc === docType}
+                          >
+                            {uploadingDoc === docType ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Upload className="h-3 w-3" />
+                            )}
+                          </Button>
+                        )}
+                        {status === 'OK' && (
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500 self-center" />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

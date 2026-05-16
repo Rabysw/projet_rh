@@ -31,6 +31,9 @@ export interface Employee {
   matricule: string;
   first_name: string;
   last_name: string;
+  email: string;
+  phone?: string;
+  hr_role: HRRole;
   birth_date: string;
   birth_place: string;
   nationality: string;
@@ -61,6 +64,7 @@ export interface Employee {
   work_location?: string;
   base_salary: number;
   
+  profile_picture?: ProfilePicture;
   profile_picture_url?: string;
   created_at: string;
   updated_at: string;
@@ -69,35 +73,38 @@ export interface Employee {
 export interface EmployeeInput {
   first_name: string;
   last_name: string;
-  birth_date: string;
-  birth_place: string;
-  nationality: string;
-  gender: string;
+  email: string;
+  password?: string;
+  phone: string;
+  hr_role: HRRole;
+  contract_type: ContractType;
+  status: EmploymentStatus;
+  department_id?: number;
+  birth_date?: string;
+  birth_place?: string;
+  nationality?: string;
+  gender?: string;
   marital_status?: string;
   children_count?: number;
-  id_card_number: string;
-  id_card_type: string;
+  id_card_number?: string;
+  id_card_type?: string;
   id_card_expiry?: string;
   address?: string;
   personal_phone?: string;
   personal_email?: string;
+  professional_phone?: string;
+  professional_email?: string;
+  work_location?: string;
   emergency_contact_name?: string;
   emergency_contact_relation?: string;
   emergency_contact_phone?: string;
-  
-  hire_date: string;
-  position: string;
   diploma?: string;
-  department_id: number;
-  manager_id?: number;
-  contract_type: string;
-  contract_start: string;
+  contract_start?: string;
   contract_end?: string;
-  status: EmploymentStatus;
-  professional_email: string;
-  professional_phone?: string;
-  work_location?: string;
-  base_salary: number;
+  manager_id?: number;
+  hire_date?: string;
+  position?: string;
+  base_salary?: number;
 }
 
 export interface Department {

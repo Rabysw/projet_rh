@@ -1,5 +1,5 @@
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
-import { useIcesAuth } from "@/hooks/use-ices-auth";
+import { useIcesAuth } from "@/contexts/AuthContext";
 import { Outlet } from "@tanstack/react-router";
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
@@ -34,7 +34,9 @@ export function Layout() {
           "/payslips",
           "/trainings",
           "/skills",
+          "/presences", // Ajouté pour le collaborateur
           "/suggestions",
+          "/evaluations", // Ajouté pour le collaborateur
           "/communication",
         ].includes(path);
       }
@@ -48,33 +50,45 @@ export function Layout() {
           "/team-skills",
           "/team/productivity",
           "/projects",
+          "/presences", // Ajouté pour le manager
+          "/evaluations", // Ajouté pour le manager
           "/profile",
+          "/team-trainings", // Ajouté pour le manager
+          "/team-notifications", // Ajouté pour le manager
           "/leave",
         ].includes(path);
       }
 
       // Resp RH
       if (role === "resp_rh") {
-        return ["/", "/rh-employees", "/rh-contracts", "/communication", "/admin/configuration"].includes(path);
+        return [
+          "/", 
+          "/rh-employees", 
+          "/rh-contracts", 
+          "/rh-attendance", 
+          "/rh-conges", 
+          "/enquetes", 
+          "/communication", 
+          "/admin/configuration",
+          "/reports"
+        ].some(p => path === p || path.startsWith("/rh-employees/"));
       }
 
       // Admin RH
       if (role === "admin_rh") {
-        // Admin peut accéder à tous les modules RH + admin users + pages employees CRUD
-        return [
-          "/",
-          "/admin-users",
-          "/rh-employees",
-          "/rh-contracts",
-          "/communication",
-          "/employees",
-          "/admin/configuration",
-        ].includes(path) || path.startsWith("/employees/");
+        return true; // Admin can see everything
       }
 
       // Direction
       if (role === "direction") {
-        return ["/", "/direction-reports", "/communication"].includes(path);
+        return [
+          "/", 
+          "/direction-reports", 
+          "/communication", 
+          "/direction-kpis", 
+          "/direction-analytics", 
+          "/direction-exports"
+        ].some(p => path === p);
       }
 
       return false;

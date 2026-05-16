@@ -1,8 +1,9 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/shared/Card";
+import { Button } from "@/components/shared/Button";
+import { Badge } from "@/components/shared/Badge";
 import { Input } from "@/components/ui/input";
-import { useApi } from "@/hooks/use-api";
+import { useApi, apiFetch } from "@/hooks/use-api";
+import { Department, ContractType } from "@/types/api";
 import { 
   Users, 
   Search,
@@ -10,16 +11,31 @@ import {
   Shield,
   Key,
   Mail,
-  Loader2
+  Loader2,
+  Trash2,
+  X,
+  User as UserIcon,
+  Phone,
+  Briefcase,
+  MapPin,
+  Calendar,
+  ChevronRight,
+  ChevronLeft,
+  CheckCircle2,
+  FileText,
+  AlertCircle
 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 
 interface SystemUser {
-  id: number;
-  name: string;
+  id: string;
+  prenom: string;
+  nom: string;
   email: string;
   role: string;
   status: string;
-  last_login: string;
 }
 
 interface RoleStat {
@@ -29,8 +45,28 @@ interface RoleStat {
 }
 
 export default function UsersPage() {
-  const { data: users, isLoading } = useApi<SystemUser[]>("/api/v1/admin-rh/users");
-  const { data: roles } = useApi<RoleStat[]>("/api/v1/admin-rh/roles");
+  const navigate = useNavigate();
+  const { data: users, isLoading, refetch } = useApi<SystemUser[]>("/api/v1/admin-rh/users");
+  const { data: roles, refetch: refetchRoles } = useApi<RoleStat[]>("/api/v1/admin-rh/roles");
+
+  const [search, setSearch] = useState("");
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Supprimer cet utilisateur ?")) return;
+    try {
+      await apiFetch(`/api/v1/admin-rh/users/${id}`, { method: "DELETE" });
+      toast.success("Utilisateur supprimé");
+      refetch();
+      refetchRoles();
+    } catch (err: any) {
+      toast.error(err.message || "Erreur de suppression");
+    }
+  };
+
+  const filteredUsers = users?.filter(u => 
+    `${u.prenom} ${u.nom}`.toLowerCase().includes(search.toLowerCase()) ||
+    u.email.toLowerCase().includes(search.toLowerCase())
+  );
 
   if (isLoading) {
     return (
@@ -39,6 +75,7 @@ export default function UsersPage() {
       </div>
     );
   }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -46,9 +83,9 @@ export default function UsersPage() {
           <h1 className="text-3xl font-bold text-foreground">Gestion des utilisateurs</h1>
           <p className="text-muted-foreground">Administrez les comptes et les rôles</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => navigate({ to: "/rh-employees/new" })}>
           <Plus className="h-4 w-4" />
-          Créer un compte
+          Nouvel Utilisateur
         </Button>
       </div>
 
@@ -76,17 +113,22 @@ export default function UsersPage() {
           <CardContent>
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input className="pl-10" placeholder="Rechercher un utilisateur..." />
+              <Input 
+                className="pl-10" 
+                placeholder="Rechercher un utilisateur..." 
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
             <div className="space-y-3">
-              {users?.map((user) => (
+              {filteredUsers?.map((user) => (
                 <div key={user.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                      {user.name.charAt(0)}
+                      {user.prenom?.charAt(0) || user.email.charAt(0)}
                     </div>
                     <div>
-                      <p className="font-medium text-sm">{user.name}</p>
+                      <p className="font-medium text-sm">{user.prenom} {user.nom}</p>
                       <div className="flex items-center gap-2">
                         <Mail className="h-3 w-3 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">{user.email}</span>
@@ -99,12 +141,12 @@ export default function UsersPage() {
                       {user.role}
                     </Badge>
                     {user.status === "active" ? (
-                      <Badge className="bg-accent text-accent text-xs">Actif</Badge>
+                      <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs">Actif</Badge>
                     ) : (
                       <Badge variant="outline" className="text-muted-foreground text-xs">Inactif</Badge>
                     )}
-                    <Button size="sm" variant="outline">
-                      <Key className="h-3 w-3" />
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(user.id)}>
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
@@ -118,32 +160,33 @@ export default function UsersPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5" />
-              Permissions
+              Permissions par rôle
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {[
-              { module: "Dossiers personnel", roles: ["Admin", "Resp RH", "Manager"] },
-              { module: "Contrats", roles: ["Admin", "Resp RH"] },
-              { module: "Congés", roles: ["Admin", "Resp RH", "Manager", "Collab"] },
-              { module: "Fiches de paie", roles: ["Admin", "Resp RH", "Collab"] },
-              { module: "Admin système", roles: ["Admin"] },
+              { module: "Dossiers personnel", roles: ["Admin RH", "Resp RH", "Manager"] },
+              { module: "Contrats", roles: ["Admin RH", "Resp RH"] },
+              { module: "Congés", roles: ["Admin RH", "Resp RH", "Manager", "Collab"] },
+              { module: "Fiches de paie", roles: ["Admin RH", "Resp RH", "Collab"] },
+              { module: "Admin système", roles: ["Admin RH"] },
             ].map((perm) => (
               <div key={perm.module} className="p-3 bg-muted/30 rounded-lg">
                 <p className="text-sm font-medium">{perm.module}</p>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {perm.roles.map((role) => (
-                    <Badge key={role} variant="secondary" className="text-xs">
+                    <Badge key={role} variant="secondary" className="text-[10px]">
                       {role}
                     </Badge>
                   ))}
                 </div>
               </div>
             ))}
-            <Button size="sm" variant="outline" className="w-full">Configurer les rôles</Button>
+            <Button size="sm" variant="outline" className="w-full">Configuration avancée</Button>
           </CardContent>
         </Card>
       </div>
+
     </div>
   );
 }

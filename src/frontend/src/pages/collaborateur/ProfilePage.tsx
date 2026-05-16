@@ -1,9 +1,9 @@
-import { useIcesAuth } from "@/hooks/use-ices-auth";
+import { useIcesAuth } from "@/contexts/AuthContext";
 import { useApi, apiFetch } from "@/hooks/use-api";
 import { useCompanyConfig } from "@/contexts/CompanyConfigContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/shared/Card";
+import { Button } from "@/components/shared/Button";
+import { Badge } from "@/components/shared/Badge";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { 

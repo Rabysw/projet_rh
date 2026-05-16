@@ -1,8 +1,8 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/shared/Card";
+import { Button } from "@/components/shared/Button";
+import { Badge } from "@/components/shared/Badge";
 import { useApi } from "@/hooks/use-api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@tanstack/react-router";
 import { 
   Users, 
   Mail, 
@@ -35,7 +35,7 @@ interface TeamStats {
 
 export default function TeamPage() {
   const { data: teamMembers, isLoading } = useApi<TeamMember[]>("/api/v1/manager/team");
-  const { data: teamStats } = useApi<TeamStats>("/api/v1/manager/team-stats");
+  const { data: teamStats } = useApi<TeamStats>("/api/v1/manager/stats");
   const navigate = useNavigate();
 
   if (isLoading) {
@@ -47,7 +47,7 @@ export default function TeamPage() {
   }
 
   const handleSeeProfile = (id: number) => {
-    navigate(`/resp-rh/employees/${id}`);
+    navigate({ to: `/rh-employees/${id}` });
   };
 
   return (

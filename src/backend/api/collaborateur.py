@@ -1,193 +1,292 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from auth.auth import get_current_user, User
-from data_store import (
-    collab_leave_balance,
-    collab_leave_requests,
-    collab_payslips,
-    collab_trainings,
-    collab_available_trainings,
-    collab_technical_skills,
-    collab_soft_skills,
-    collab_goals,
-    collab_certificates,
-    collab_suggestions,
-    manager_leave_requests,
-    LeaveRequest,
-    TeamLeaveRequest,
-)
+from supabase_client import supabase
+from datetime import datetime
+from typing import Optional, List
 
 router = APIRouter()
 
-@router.get("/profile")
-async def get_profile(current_user: User = Depends(get_current_user)):
-    from data_store import rh_employees
-    emp = next((e for e in rh_employees if e.id == current_user.id), None)
-    return {
-        "user": {"full_name": current_user.full_name, "email": current_user.email},
-        "department": emp.department if emp else "Tech",
-        "position": emp.role if emp else "Développeur",
-        "manager": "Sophie Martin",
-        "hire_date": emp.hired if emp else "15/03/2022",
-        "contract_type": emp.contract if emp else "CDI",
-        "phone": emp.personal_phone if emp else "+229 97 00 00 00",
-        "address": emp.address if emp else "Cotonou, Bénin",
-        "birth_date": "12/06/1990",
-        "matricule": emp.matricule if emp else "EMP-001",
-        "cnss": "1234567890",
-        "ifu": "1202012345678",
-        "situation_matrimoniale": "Marié(e)",
-        "enfants": 2
-    }
-
-@router.get("/leave-balance")
-async def get_leave_balance(current_user: User = Depends(get_current_user)):
-    return collab_leave_balance
-
-@router.get("/leave-requests")
-async def get_leave_requests(current_user: User = Depends(get_current_user)):
-    return collab_leave_requests
-
-@router.get("/payslips")
-async def get_payslips(current_user: User = Depends(get_current_user)):
-    return collab_payslips
-
-@router.get("/trainings")
-async def get_trainings(current_user: User = Depends(get_current_user)):
-    return collab_trainings
-
-@router.get("/available-trainings")
-async def get_available_trainings(current_user: User = Depends(get_current_user)):
-    return collab_available_trainings
-
-@router.get("/certificates")
-async def get_certificates(current_user: User = Depends(get_current_user)):
-    return collab_certificates
-
-@router.get("/skills/technical")
-async def get_technical_skills(current_user: User = Depends(get_current_user)):
-    return collab_technical_skills
-
-@router.get("/skills/soft")
-async def get_soft_skills(current_user: User = Depends(get_current_user)):
-    return collab_soft_skills
-
-@router.get("/goals")
-async def get_development_goals(current_user: User = Depends(get_current_user)):
-    return collab_goals
-
-@router.get("/suggestions")
-async def get_suggestions(current_user: User = Depends(get_current_user)):
-    return collab_suggestions
-
-@router.post("/suggestions")
-async def create_suggestion(suggestion: dict, current_user: User = Depends(get_current_user)):
-    from data_store import Suggestion
-    from datetime import datetime
-    new_id = len(collab_suggestions) + 1
-    new_sug = Suggestion(
-        id=new_id,
-        title=suggestion.get("title", "Sans titre"),
-        category=suggestion.get("category", "Général"),
-        date=datetime.now().strftime("%d/%m/%Y"),
-        status="Soumis",
-        likes=0,
-        response=""
-    )
-    collab_suggestions.insert(0, new_sug)
-    return new_sug
-
-@router.patch("/profile")
-async def update_profile(profile_data: dict, current_user: User = Depends(get_current_user)):
-    # In a real app, update DB. 
-    # For mock, we update the rh_employees list if found
-    from data_store import rh_employees
-    employee = next((e for e in rh_employees if e.id == current_user.id), None)
-    if employee:
-        if "phone" in profile_data:
-            employee.personal_phone = profile_data["phone"]
-        if "address" in profile_data:
-            employee.address = profile_data["address"]
-    return {"message": "Profil mis à jour avec succès"}
-
-@router.put("/goals/{goal_id}")
-async def update_goal(goal_id: int, goal_data: dict, current_user: User = Depends(get_current_user)):
-    # Update progress of a goal
-    for goal in collab_goals:
-        if id(goal) == goal_id: # Simulating search by ID
-            goal.progress = goal_data.get("progress", goal.progress)
-            return goal
-    return {"message": "Objectif mis à jour"}
-
-@router.post("/trainings/inscription")
-async def register_training(training_data: dict, current_user: User = Depends(get_current_user)):
-    from data_store import Training
-    from datetime import datetime
-    tid = training_data.get("id")
-    # Move from available to active
-    training = next((t for t in collab_available_trainings if t.id == tid), None)
-    if training:
-        new_active = Training(
-            id=training.id,
-            title=training.title,
-            status="Inscrit",
-            date=datetime.now().strftime("%d/%m/%Y"),
-            duration=training.duration,
-            progress=0
-        )
-        collab_trainings.insert(0, new_active)
-        # Remove from available (mock)
-        return new_active
-    return {"message": "Inscription réussie"}
+# ==================== NOTIFICATIONS ====================
 
 @router.get("/notifications")
-async def get_notifications(current_user: User = Depends(get_current_user)):
-    # 3. Notifications (Générées depuis les statuts)
+def get_notifications(current_user: User = Depends(get_current_user)):
+    """Récupère les notifications pour l'utilisateur courant."""
+    # On essaie de récupérer l'ID employé
+    emp_id = None
+    try:
+        resp = supabase.table("employees").select("id").eq("user_id", str(current_user.id)).limit(1).execute()
+        if resp.data:
+            emp_id = resp.data[0]["id"]
+    except Exception:
+        pass
+
     notifications = []
-    for req in collab_leave_requests:
-        if req.status == 'approved':
-            notifications.append({
-                "type": "Validation",
-                "message": f"Votre demande de {req.type} a été approuvée.",
-                "date": "Aujourd'hui",
-                "lu": False
-            })
-        elif req.status == 'rejected':
-            notifications.append({
-                "type": "Refus",
-                "message": f"Votre demande de {req.type} a été refusée.",
-                "date": "Aujourd'hui",
-                "lu": False
-            })
+    
+    if emp_id:
+        # 1. Notifications de congés
+        try:
+            leave_reqs = supabase.table("leave_requests").select("*").eq("employee_id", emp_id).order("updated_at", desc=True).limit(5).execute()
+            for req in (leave_reqs.data or []):
+                if req["status"] != "pending":
+                    notifications.append({
+                        "id": f"leave_{req['id']}",
+                        "type": "Information",
+                        "message": f"Votre demande de {req['leave_type']} du {req['start_date']} est {req['status']}.",
+                        "date": str(req.get("updated_at", ""))[:10],
+                        "lu": False
+                    })
+        except Exception:
+            pass
+
     return notifications
 
+
+# ==================== UTILITAIRE ====================
+
+def get_employee_id(user_id: str) -> str | None:
+    """Retourne l'employee_id lié à un user_id, ou None."""
+    resp = supabase.table("employees").select("id").eq("user_id", user_id).limit(1).execute()
+    return resp.data[0]["id"] if resp.data else None
+
+
+# ==================== PROFIL ====================
+
+@router.get("/profile")
+def get_profile(current_user: User = Depends(get_current_user)):
+    response = supabase.table("employees").select("*").eq("user_id", str(current_user.id)).limit(1).execute()
+    emp = response.data[0] if response.data else None
+
+    # Récupérer le nom du manager si défini
+    manager_name = ""
+    if emp and emp.get("manager_id"):
+        mgr = supabase.table("employees").select("first_name, last_name").eq("id", emp["manager_id"]).limit(1).execute()
+        if mgr.data:
+            m = mgr.data[0]
+            manager_name = f"{m.get('first_name', '')} {m.get('last_name', '')}".strip()
+
+    return {
+        "user": {"full_name": current_user.full_name, "email": current_user.email},
+        "department_id": emp.get("department_id") if emp else None,
+        "position": emp.get("position", "") if emp else "",
+        "manager": manager_name,
+        "hire_date": emp.get("hire_date", "") if emp else "",
+        "contract_type": emp.get("contract_type", "") if emp else "",
+        "phone": emp.get("professional_phone", "") if emp else "",
+        "address": emp.get("address", "") if emp else "",
+        "birth_date": emp.get("birth_date", "") if emp else "",
+        "matricule": emp.get("matricule", "") if emp else "",
+    }
+
+
+@router.patch("/profile")
+def update_profile(profile_data: dict, current_user: User = Depends(get_current_user)):
+    """
+    Le collaborateur peut modifier uniquement phone et address.
+    Les données sensibles passent par RH.
+    """
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        raise HTTPException(status_code=404, detail="Employé non trouvé")
+
+    # Champs autorisés pour le collaborateur
+    allowed_fields = {"phone": "personal_phone", "address": "address"}
+    update_data = {db_key: profile_data[key] for key, db_key in allowed_fields.items() if key in profile_data}
+    update_data["updated_at"] = datetime.now().isoformat()
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Aucun champ modifiable fourni")
+
+    supabase.table("employees").update(update_data).eq("id", emp_id).execute()
+
+    return {"message": "Profil mis à jour avec succès"}
+
+
+# ==================== CONGÉS ====================
+
+@router.get("/leave-balance")
+def get_leave_balance(current_user: User = Depends(get_current_user)):
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+
+    response = supabase.table("leave_balances").select("*").eq("employee_id", emp_id).execute()
+    
+    return [
+        {
+            "type": r["leave_type"],
+            "total": r["total_days"],
+            "used": r["used_days"],
+            "remaining": r["remaining_days"],
+        }
+        for r in (response.data or [])
+    ]
+
+
+@router.get("/leave-requests")
+def get_leave_requests(current_user: User = Depends(get_current_user)):
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+
+    response = (
+        supabase.table("leave_requests")
+        .select("*")
+        .eq("employee_id", emp_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+
+    return [
+        {
+            "id": r["id"],
+            "type": r["leave_type"],
+            "start": r["start_date"],
+            "end": r["end_date"],
+            "days": r["days"],
+            "status": r["status"],
+            "reason": r.get("reason", ""),
+            "commentaire_manager": r.get("manager_comment", ""),
+        }
+        for r in (response.data or [])
+    ]
+
+
 @router.post("/leave-requests")
-async def create_leave_request(request: dict, current_user: User = Depends(get_current_user)):
-    # In a real app, we would use a Pydantic model and save to DB
-    new_id = len(collab_leave_requests) + 100 # Offset to avoid conflict with mock data
-    
-    # 1. Update collaborator's personal list
-    new_request = LeaveRequest(
-        id=new_id,
-        type=request.get("type"),
-        start=request.get("start"),
-        end=request.get("end"),
-        days=request.get("days"),
-        status="pending",
-        reason=request.get("reason", "")
+def create_leave_request(request: dict, current_user: User = Depends(get_current_user)):
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        raise HTTPException(status_code=404, detail="Employé non trouvé")
+
+    new_request = {
+        "employee_id": emp_id,
+        "leave_type": request.get("type"),
+        "start_date": request.get("start"),
+        "end_date": request.get("end"),
+        "days": request.get("days"),
+        "status": "pending",
+        "reason": request.get("reason", ""),
+        "justificatif_url": request.get("justificatif_url", ""),
+    }
+
+    response = supabase.table("leave_requests").insert(new_request).execute()
+    if not response.data:
+        raise HTTPException(status_code=500, detail="Erreur lors de la création")
+        
+    r = response.data[0]
+    return r
+
+
+# ==================== PRÉSENCES ====================
+
+@router.get("/attendance")
+def get_attendance(current_user: User = Depends(get_current_user)):
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return {"historique": []}
+
+    response = (
+        supabase.table("attendance")
+        .select("*")
+        .eq("employee_id", emp_id)
+        .order("date", desc=True)
+        .limit(30)
+        .execute()
     )
-    collab_leave_requests.insert(0, new_request)
-    
-    # 2. ALSO update the manager's team leave request list
-    manager_request = TeamLeaveRequest(
-        id=new_id,
-        employee=current_user.full_name,
-        type=request.get("type"),
-        start=request.get("start"),
-        end=request.get("end"),
-        days=request.get("days"),
-        status="pending",
-        reason=request.get("reason", "Aucun motif fourni")
+
+    records = response.data or []
+
+    return {
+        "historique": [
+            {
+                "date": r["date"],
+                "heure_arrivee": r.get("clock_in", ""),
+                "heure_depart": r.get("clock_out", ""),
+                "location": r.get("location", ""),
+                "status": r.get("status", "present"),
+            }
+            for r in records
+        ],
+    }
+
+
+# ==================== ÉVALUATIONS ====================
+
+@router.get("/evaluations")
+def get_evaluations(current_user: User = Depends(get_current_user)):
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+
+    response = (
+        supabase.table("evaluations")
+        .select("*")
+        .eq("employee_id", emp_id)
+        .order("evaluation_date", desc=True)
+        .execute()
     )
-    manager_leave_requests.insert(0, manager_request)
+    return response.data or []
+
+
+# ==================== FORMATIONS ====================
+
+@router.get("/trainings")
+def get_trainings(current_user: User = Depends(get_current_user)):
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+
+    # Mes inscriptions
+    enrollments = supabase.table("training_enrollments").select("*, trainings(*)").eq("employee_id", emp_id).execute()
+    return enrollments.data or []
+
+@router.get("/available-trainings")
+def get_available_trainings(current_user: User = Depends(get_current_user)):
+    """Récupère les formations disponibles au catalogue"""
+    response = supabase.table("available_trainings").select("*").execute()
+    return response.data or []
+
+@router.get("/certificates")
+def get_certificates(current_user: User = Depends(get_current_user)):
+    """Récupère les certificats obtenus par le collaborateur"""
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+    response = supabase.table("certificates").select("*").eq("employee_id", emp_id).execute()
+    return response.data or []
+
+
+@router.get("/payslips")
+def get_payslips(current_user: User = Depends(get_current_user)):
+    """Récupère les fiches de paie du collaborateur"""
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+
+    response = (
+        supabase.table("payslips")
+        .select("*")
+        .eq("employee_id", emp_id)
+        .order("payment_date", desc=True)
+        .execute()
+    )
+
+    return response.data or []
+
+
+# ==================== SUGGESTIONS ====================
+
+@router.post("/suggestions")
+def create_suggestion(suggestion: dict, current_user: User = Depends(get_current_user)):
+    emp_id = get_employee_id(str(current_user.id))
     
-    return new_request
+    new_suggestion = {
+        "employee_id": emp_id,
+        "title": suggestion.get("title"),
+        "content": suggestion.get("content"),
+        "category": suggestion.get("category"),
+        "is_anonymous": suggestion.get("is_anonymous", False),
+        "status": "pending"
+    }
+    
+    response = supabase.table("suggestions").insert(new_suggestion).execute()
+    return response.data[0] if response.data else None

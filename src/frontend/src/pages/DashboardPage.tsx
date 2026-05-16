@@ -1,4 +1,4 @@
-import { useIcesAuth } from "@/hooks/use-ices-auth";
+import { useIcesAuth } from "@/contexts/AuthContext";
 import CollaborateurDashboard from "./dashboards/CollaborateurDashboard";
 import ManagerDashboard from "./dashboards/ManagerDashboard";
 import RespRHDashboard from "./dashboards/RespRHDashboard";
