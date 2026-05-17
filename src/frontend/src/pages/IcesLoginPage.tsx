@@ -209,11 +209,11 @@ export default function IcesLoginPage() {
               Identifiants de démonstration :
             </p>
             <div className="text-xs text-muted-foreground space-y-1">
-              <p><strong>Admin:</strong> admin@ices.bj</p>
-              <p><strong>Direction:</strong> dir@ices.bj</p>
-              <p><strong>RH:</strong> rh@ices.bj</p>
-              <p><strong>Manager:</strong> manager@ices.bj</p>
-              <p><strong>Collab:</strong> collab@ices.bj</p>
+              <p><strong>Admin:</strong> admin@ices.com</p>
+              <p><strong>Direction:</strong> direction@ices.com</p>
+              <p><strong>RH:</strong> rh@ices.com</p>
+              <p><strong>Manager:</strong> manager@ices.com</p>
+              <p><strong>Collab:</strong> collab@ices.com</p>
               <p><strong>Mot de passe:</strong> password123</p>
             </div>
           </div>
