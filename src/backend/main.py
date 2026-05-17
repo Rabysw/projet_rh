@@ -26,7 +26,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:5173",
-        "https://projet-rh-frontend.vercel.app",
+        "https://projet-rh-4.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
