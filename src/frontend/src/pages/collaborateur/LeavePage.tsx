@@ -220,55 +220,41 @@ export default function LeavePage() {
       {/* Historique */}
       <Card>
         <CardHeader>
-          <CardTitle>Historique des demandes</CardTitle>
+          <CardTitle>Mes demandes récentes</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {requestsLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : leaveRequests?.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                Aucune demande de congé pour le moment.
-              </p>
-            ) : (
-              leaveRequests?.map((req) => (
-                <div
-                  key={req.id}
-                  className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <Calendar className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+          {requestsLoading ? (
+            <div className="flex h-32 items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !leaveRequests?.length ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-muted-foreground">Vous n'avez aucune demande de congé.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {leaveRequests.map((leave) => (
+                <div key={leave.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 bg-muted rounded-full">
+                      <Calendar className="h-4 w-4 text-primary" />
+                    </div>
                     <div>
-                      <p className="font-medium text-sm">{req.type}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {req.start} → {req.end} ({req.days} jours)
-                      </p>
+                      <p className="font-medium">{leave.type}</p>
+                      <p className="text-sm text-muted-foreground">{leave.days} jours • du {leave.start} au {leave.end}</p>
                     </div>
                   </div>
-
-                  {/* ── Badges corrigés ── */}
-                  {req.status === "approved" ? (
-                    <Badge className="gap-1 bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-100">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Approuvé
-                    </Badge>
-                  ) : req.status === "pending" ? (
-                    <Badge className="gap-1 bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 hover:bg-amber-100">
-                      <Hourglass className="h-3 w-3" />
-                      En attente
-                    </Badge>
-                  ) : (
-                    <Badge className="gap-1 bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 hover:bg-rose-100">
-                      <XCircle className="h-3 w-3" />
-                      Refusé
-                    </Badge>
-                  )}
+                  <Badge className={
+                    leave.status === 'approved' ? 'bg-green-100 text-green-700' : 
+                    leave.status === 'rejected' ? 'bg-red-100 text-red-700' : 
+                    'bg-orange-100 text-orange-700'
+                  }>
+                    {leave.status === 'pending' ? 'En attente' : leave.status === 'approved' ? 'Approuvé' : 'Refusé'}
+                  </Badge>
                 </div>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

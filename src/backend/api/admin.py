@@ -5,6 +5,7 @@ from datetime import datetime
 
 from auth.auth import get_current_user, User
 from supabase_client import supabase
+from utils.db_utils import retry_on_disconnect
 
 router = APIRouter()
 
@@ -48,6 +49,7 @@ class CompanyConfigInDB(CompanyConfigBase):
 
 # ✅ GET sans authentification
 @router.get("/company-config", response_model=CompanyConfigInDB)
+@retry_on_disconnect()
 def get_company_config():
     """Récupère la configuration de l'entreprise avec fallback en cas d'erreur réseau"""
     try:
@@ -74,6 +76,7 @@ def get_company_config():
         )
 
 @router.post("/company-config", response_model=CompanyConfigInDB)
+@retry_on_disconnect()
 def set_company_config(
     config: CompanyConfigBase,
     current_user: User = Depends(get_current_user)

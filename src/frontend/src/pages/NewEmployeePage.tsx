@@ -5,6 +5,7 @@ import type { Department, EmployeeInput, Employee } from "@/types";
 import { ContractType, EmploymentStatus, HRRole } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useApi } from "@/hooks/use-api";
 import { 
   ArrowLeft, 
   Camera, 
@@ -73,11 +74,6 @@ export default function NewEmployeePage() {
     queryFn: () => apiClient<Department[]>("/departments/"),
   });
 
-  const { data: employees } = useQuery<Employee[]>({
-    queryKey: ["employees"],
-    queryFn: () => apiClient<Employee[]>("/employees/"),
-  });
-
   const [form, setForm] = useState<EmployeeInput>({
     // Accès & Identité de base
     first_name: "",
@@ -127,6 +123,8 @@ export default function NewEmployeePage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+
+  const { data: managers } = useApi<any[]>("/api/v1/resp-rh/managers");
 
   const set = <K extends keyof EmployeeInput>(
     key: K,
@@ -571,9 +569,9 @@ export default function NewEmployeePage() {
                 className={selectClass}
               >
                 <option value="">Aucun manager</option>
-                {employees?.map((emp) => (
-                  <option key={String(emp.id)} value={String(emp.id)}>
-                    {emp.first_name} {emp.last_name}
+                {managers?.map((m) => (
+                  <option key={String(m.id)} value={String(m.id)}>
+                    {m.first_name} {m.last_name}
                   </option>
                 ))}
               </select>
@@ -619,10 +617,14 @@ export default function NewEmployeePage() {
                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
                   id="new-base-salary"
-                  type="number"
-                  value={form.base_salary}
-                  onChange={(e) => set("base_salary", parseInt(e.target.value) || 0)}
+                  type="text"
+                  value={form.base_salary === 0 ? "" : form.base_salary}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9]/g, "");
+                    set("base_salary", val === "" ? 0 : parseInt(val));
+                  }}
                   className={inputClass + " pl-10"}
+                  placeholder="0"
                 />
               </div>
             </FormField>

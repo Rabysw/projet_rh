@@ -3,12 +3,14 @@ from auth.auth import get_current_user, User
 from supabase_client import supabase
 from datetime import datetime
 from typing import Optional, List
+from utils.db_utils import retry_on_disconnect
 
 router = APIRouter()
 
 # ==================== NOTIFICATIONS ====================
 
 @router.get("/notifications")
+@retry_on_disconnect()
 def get_notifications(current_user: User = Depends(get_current_user)):
     """Récupère les notifications pour l'utilisateur courant."""
     # On essaie de récupérer l'ID employé
@@ -43,15 +45,21 @@ def get_notifications(current_user: User = Depends(get_current_user)):
 
 # ==================== UTILITAIRE ====================
 
+@retry_on_disconnect()
 def get_employee_id(user_id: str) -> str | None:
     """Retourne l'employee_id lié à un user_id, ou None."""
-    resp = supabase.table("employees").select("id").eq("user_id", user_id).limit(1).execute()
-    return resp.data[0]["id"] if resp.data else None
+    try:
+        resp = supabase.table("employees").select("id").eq("user_id", user_id).limit(1).execute()
+        return resp.data[0]["id"] if resp.data else None
+    except Exception as e:
+        print(f"Error in get_employee_id: {e}")
+        return None
 
 
 # ==================== PROFIL ====================
 
 @router.get("/profile")
+@retry_on_disconnect()
 def get_profile(current_user: User = Depends(get_current_user)):
     response = supabase.table("employees").select("*").eq("user_id", str(current_user.id)).limit(1).execute()
     emp = response.data[0] if response.data else None
@@ -104,6 +112,7 @@ def update_profile(profile_data: dict, current_user: User = Depends(get_current_
 # ==================== CONGÉS ====================
 
 @router.get("/leave-balance")
+@retry_on_disconnect()
 def get_leave_balance(current_user: User = Depends(get_current_user)):
     emp_id = get_employee_id(str(current_user.id))
     if not emp_id:
@@ -123,6 +132,7 @@ def get_leave_balance(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/leave-requests")
+@retry_on_disconnect()
 def get_leave_requests(current_user: User = Depends(get_current_user)):
     emp_id = get_employee_id(str(current_user.id))
     if not emp_id:
@@ -152,6 +162,7 @@ def get_leave_requests(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/leave-requests")
+@retry_on_disconnect()
 def create_leave_request(request: dict, current_user: User = Depends(get_current_user)):
     emp_id = get_employee_id(str(current_user.id))
     if not emp_id:
@@ -179,6 +190,7 @@ def create_leave_request(request: dict, current_user: User = Depends(get_current
 # ==================== PRÉSENCES ====================
 
 @router.get("/attendance")
+@retry_on_disconnect()
 def get_attendance(current_user: User = Depends(get_current_user)):
     emp_id = get_employee_id(str(current_user.id))
     if not emp_id:
@@ -212,6 +224,7 @@ def get_attendance(current_user: User = Depends(get_current_user)):
 # ==================== ÉVALUATIONS ====================
 
 @router.get("/evaluations")
+@retry_on_disconnect()
 def get_evaluations(current_user: User = Depends(get_current_user)):
     emp_id = get_employee_id(str(current_user.id))
     if not emp_id:
@@ -230,22 +243,55 @@ def get_evaluations(current_user: User = Depends(get_current_user)):
 # ==================== FORMATIONS ====================
 
 @router.get("/trainings")
+@retry_on_disconnect()
 def get_trainings(current_user: User = Depends(get_current_user)):
     emp_id = get_employee_id(str(current_user.id))
     if not emp_id:
         return []
 
     # Mes inscriptions
-    enrollments = supabase.table("training_enrollments").select("*, trainings(*)").eq("employee_id", emp_id).execute()
-    return enrollments.data or []
+    try:
+        enrollments = supabase.table("training_enrollments").select("*, trainings(*)").eq("employee_id", emp_id).execute()
+        
+        result = []
+        for e in (enrollments.data or []):
+            t = e.get("trainings", {})
+            result.append({
+                "id": e["id"],
+                "title": t.get("title", "Formation"),
+                "status": e.get("status", "enrolled"),
+                "date": t.get("start_date", ""),
+                "duration": t.get("duration", ""),
+                "progress": e.get("progress", 0),
+                "evaluated": False # Placeholder
+            })
+        return result
+    except Exception as e:
+        print(f"Error fetching trainings: {e}")
+        return []
 
 @router.get("/available-trainings")
+@retry_on_disconnect()
 def get_available_trainings(current_user: User = Depends(get_current_user)):
     """Récupère les formations disponibles au catalogue"""
-    response = supabase.table("available_trainings").select("*").execute()
-    return response.data or []
+    try:
+        response = supabase.table("trainings").select("*").execute()
+        return [
+            {
+                "id": t["id"],
+                "title": t["title"],
+                "category": t.get("category", "Général"),
+                "duration": t.get("duration", ""),
+                "deadline": t.get("end_date", "")
+            }
+            for t in (response.data or [])
+        ]
+    except Exception as e:
+        print(f"Error fetching available trainings: {e}")
+        return []
 
 @router.get("/certificates")
+@retry_on_disconnect()
 def get_certificates(current_user: User = Depends(get_current_user)):
     """Récupère les certificats obtenus par le collaborateur"""
     emp_id = get_employee_id(str(current_user.id))
@@ -256,6 +302,7 @@ def get_certificates(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/payslips")
+@retry_on_disconnect()
 def get_payslips(current_user: User = Depends(get_current_user)):
     """Récupère les fiches de paie du collaborateur"""
     emp_id = get_employee_id(str(current_user.id))
@@ -276,6 +323,7 @@ def get_payslips(current_user: User = Depends(get_current_user)):
 # ==================== SUGGESTIONS ====================
 
 @router.post("/suggestions")
+@retry_on_disconnect()
 def create_suggestion(suggestion: dict, current_user: User = Depends(get_current_user)):
     emp_id = get_employee_id(str(current_user.id))
     
@@ -290,3 +338,162 @@ def create_suggestion(suggestion: dict, current_user: User = Depends(get_current
     
     response = supabase.table("suggestions").insert(new_suggestion).execute()
     return response.data[0] if response.data else None
+
+# ==================== COMPÉTENCES ====================
+
+@router.get("/skills/technical")
+@retry_on_disconnect()
+def get_technical_skills(current_user: User = Depends(get_current_user)):
+    """Récupère les compétences techniques du collaborateur."""
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+
+    try:
+        response = (
+            supabase.table("employee_skills")
+            .select("*")
+            .eq("employee_id", emp_id)
+            .eq("type", "technical")
+            .execute()
+        )
+        return [
+            {
+                "id": r["id"],
+                "name": r.get("name", ""),
+                "level": r.get("level", 0),        # ex: 1-5
+                "category": r.get("category", ""),
+            }
+            for r in (response.data or [])
+        ]
+    except Exception as e:
+        print(f"Error fetching technical skills: {e}")
+        return []
+
+@router.get("/skills/soft")
+@retry_on_disconnect()
+def get_soft_skills(current_user: User = Depends(get_current_user)):
+    """Récupère les compétences comportementales du collaborateur."""
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+
+    try:
+        response = (
+            supabase.table("employee_skills")
+            .select("*")
+            .eq("employee_id", emp_id)
+            .eq("type", "soft")
+            .execute()
+        )
+        return [
+            {
+                "id": r["id"],
+                "name": r.get("name", ""),
+                "level": r.get("level", 0),
+                "category": r.get("category", ""),
+            }
+            for r in (response.data or [])
+        ]
+    except Exception as e:
+        print(f"Error fetching soft skills: {e}")
+        return []
+
+
+# ==================== OBJECTIFS ====================
+
+@router.get("/goals")
+@retry_on_disconnect()
+def get_goals(current_user: User = Depends(get_current_user)):
+    """Récupère les objectifs du collaborateur."""
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+
+    try:
+        response = (
+            supabase.table("goals")
+            .select("*")
+            .eq("employee_id", emp_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return [
+            {
+                "id": r["id"],
+                "title": r.get("title", ""),
+                "description": r.get("description", ""),
+                "progress": r.get("progress", 0),   # 0-100
+                "status": r.get("status", "in_progress"),
+                "due_date": r.get("due_date", ""),
+                "category": r.get("category", ""),
+            }
+            for r in (response.data or [])
+        ]
+    except Exception as e:
+        print(f"Error fetching goals: {e}")
+        return []
+
+
+# ==================== COMPÉTENCES ====================
+
+@router.get("/skills/technical")
+@retry_on_disconnect()
+def get_technical_skills(current_user: User = Depends(get_current_user)):
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+    try:
+        response = (
+            supabase.table("employee_skills")
+            .select("*")
+            .eq("employee_id", emp_id)
+            .eq("type", "technical")
+            .execute()
+        )
+        return [{"id": r["id"], "name": r.get("name", ""), "level": r.get("level", 0), "category": r.get("category", "")} for r in (response.data or [])]
+    except Exception as e:
+        print(f"Error fetching technical skills: {e}")
+        return []
+
+
+@router.get("/skills/soft")
+@retry_on_disconnect()
+def get_soft_skills(current_user: User = Depends(get_current_user)):
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+    try:
+        response = (
+            supabase.table("employee_skills")
+            .select("*")
+            .eq("employee_id", emp_id)
+            .eq("type", "soft")
+            .execute()
+        )
+        return [{"id": r["id"], "name": r.get("name", ""), "level": r.get("level", 0), "category": r.get("category", "")} for r in (response.data or [])]
+    except Exception as e:
+        print(f"Error fetching soft skills: {e}")
+        return []
+
+
+# ==================== OBJECTIFS ====================
+
+@router.get("/goals")
+@retry_on_disconnect()
+def get_goals(current_user: User = Depends(get_current_user)):
+    emp_id = get_employee_id(str(current_user.id))
+    if not emp_id:
+        return []
+    try:
+        response = (
+            supabase.table("goals")
+            .select("*")
+            .eq("employee_id", emp_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return [{"id": r["id"], "title": r.get("title", ""), "description": r.get("description", ""), "progress": r.get("progress", 0), "status": r.get("status", "in_progress"), "due_date": r.get("due_date", ""), "category": r.get("category", "")} for r in (response.data or [])]
+    except Exception as e:
+        print(f"Error fetching goals: {e}")
+        return []

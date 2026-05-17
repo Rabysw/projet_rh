@@ -55,7 +55,7 @@ ROLE_ALIASES = {
 
 def normalize_role(role: Optional[str]) -> str:
     if not role:
-        return "collaborateur"  # Valeur par défaut sécurisée
+        raise ValueError("Le rôle de l'utilisateur est manquant ou invalide.")
     role_key = role.strip().lower()
     return ROLE_ALIASES.get(role_key, role_key)
 
@@ -82,6 +82,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Service d'authentification temporairement indisponible. Réessayez plus tard.",
         )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur inattendue lors de la connexion à Supabase : {str(e)}",
+        )
 
     if not response.data:
         raise HTTPException(
@@ -94,11 +99,14 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     user_email = user_data.get("email")
 
     # Utilisation du rôle réel de la base de données Supabase
-    normalized_role = normalize_role(user_data.get("role"))
     try:
+        normalized_role = normalize_role(user_data.get("role"))
         user_role = UserRole(normalized_role)
-    except ValueError:
-        user_role = UserRole.COLLABORATEUR
+    except (ValueError, KeyError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le rôle de l'utilisateur est manquant ou invalide."
+        )
 
     return User(
         id=user_data["id"],

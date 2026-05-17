@@ -163,7 +163,7 @@ export default function ProfilePage() {
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   />
                 ) : (
-                  <p className="text-sm text-muted-foreground">{profile?.phone || `${phonePrefix} XX XX XX XX`}</p>
+                  <p className="text-sm text-muted-foreground">{profile?.phone || "Non renseigné"}</p>
                 )}
               </div>
             </div>

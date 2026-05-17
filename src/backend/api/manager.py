@@ -10,6 +10,18 @@ def require_role(current_user: User, allowed_roles: list):
     if current_user.role not in allowed_roles:
         raise HTTPException(status_code=403, detail="Accès non autorisé")
 
+@router.get("/notifications")
+def get_notifications(unread_only: bool = False, current_user: User = Depends(get_current_user)):
+    require_role(current_user, ["manager", "admin_rh"])
+    # Placeholder
+    return []
+
+@router.get("/trainings")
+def get_team_trainings(current_user: User = Depends(get_current_user)):
+    require_role(current_user, ["manager", "admin_rh"])
+    # Placeholder
+    return []
+
 @router.get("/team")
 def read_team(current_user: User = Depends(get_current_user)):
     require_role(current_user, ["manager", "admin_rh", "resp_rh"])

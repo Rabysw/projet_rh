@@ -96,38 +96,38 @@ export default function CollaborateurDashboard() {
         />
         <KpiCard
           icon={<AlertCircle className="h-4 w-4 text-amber-500" />}
-          label="Demandes en attente"
+          label="Demandes en cours"
           value={kpis.demandes_en_cours}
           unit="demandes"
-          color="amber"
+          color="warning"
         />
         <KpiCard
           icon={<BookOpen className="h-4 w-4 text-blue-500" />}
-          label="Formations planifiées"
+          label="Formations"
           value={kpis.formations_planifiees}
-          unit="sessions"
-          color="blue"
+          unit="session(s)"
+          color="info"
         />
         <KpiCard
           icon={<Target className="h-4 w-4 text-green-500" />}
-          label="Objectifs atteints"
+          label="Objectifs"
           value={kpis.taux_objectifs_atteints}
           unit="%"
-          color="green"
+          color="success"
         />
         <KpiCard
           icon={<Timer className="h-4 w-4 text-purple-500" />}
           label="Heures supp."
           value={kpis.heures_supplementaires}
           unit="h"
-          color="purple"
+          color="secondary"
         />
         <KpiCard
           icon={<Bell className="h-4 w-4 text-rose-500" />}
-          label="Notifs non lues"
+          label="Notifications"
           value={kpis.notifications_non_lues}
-          unit=""
-          color="rose"
+          unit="nouvelles"
+          color="danger"
         />
       </div>
 

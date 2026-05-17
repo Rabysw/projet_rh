@@ -13,7 +13,12 @@ async def list_vehicles(current_user: User = Depends(get_current_user)):
     query = supabase.table("vehicles").select("*")
 
     if current_user.role not in ["resp_rh", "admin_rh", "direction"]:
-        query = query.eq("assigned_to", current_user.id)
+        # Get employee_id
+        emp_resp = supabase.table("employees").select("id").eq("user_id", str(current_user.id)).limit(1).execute()
+        if not emp_resp.data:
+            return []
+        emp_id = emp_resp.data[0]["id"]
+        query = query.eq("assigned_to", emp_id)
     
     response = query.execute()
     return response.data
@@ -55,8 +60,14 @@ async def assign_vehicle(
 @router.post("/badges/declarer-perte")
 async def report_lost_badge(current_user: User = Depends(get_current_user)):
     """Désactive le badge actuel et notifie la RH pour remplacement"""
+    # Get employee_id
+    emp_resp = supabase.table("employees").select("id").eq("user_id", str(current_user.id)).limit(1).execute()
+    if not emp_resp.data:
+        raise HTTPException(status_code=404, detail="Profil employé non trouvé")
+    emp_id = emp_resp.data[0]["id"]
+
     supabase.table("badges").update({"status": "Perdu"})\
-        .eq("employee_id", current_user.id)\
+        .eq("employee_id", emp_id)\
         .eq("status", "Actif").execute()
         
     return {"message": "Badge désactivé pour sécurité. Demande de remplacement envoyée."}

@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from supabase_client import supabase
 from auth.auth import normalize_role
+from utils.db_utils import retry_on_disconnect
 import bcrypt
 
 router = APIRouter()
@@ -23,6 +24,7 @@ class LoginResponse(BaseModel):
     user: UserData
 
 @router.post("/login", response_model=LoginResponse)
+@retry_on_disconnect()
 def login(credentials: LoginRequest):
     print(f"Login attempt for: {credentials.email}")
     try:

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from auth.auth import get_current_user, User
 from supabase_client import supabase
 from pydantic import BaseModel
+from utils.db_utils import retry_on_disconnect
 
 router = APIRouter()
 
@@ -45,7 +46,25 @@ class PointageCreate(BaseModel):
 
 # ─── Employees ────────────────────────────────────────────────────────────────
 
+@router.get("/managers")
+@retry_on_disconnect()
+def get_managers(current_user: User = Depends(get_current_user)):
+    require_role(current_user, ["admin_rh", "resp_rh", "manager"])
+    
+    # We fetch all employees who can be managers (roles: manager, admin_rh, resp_rh, direction)
+    # First, get users with those roles
+    user_res = supabase.table("users").select("id").in_("role", ["manager", "admin_rh", "resp_rh", "direction"]).execute()
+    user_ids = [u["id"] for u in user_res.data] if user_res.data else []
+    
+    if not user_ids:
+        return []
+        
+    # Then get their employee profiles
+    emp_res = supabase.table("employees").select("id, first_name, last_name").in_("user_id", user_ids).execute()
+    return emp_res.data or []
+
 @router.get("/employees")
+@retry_on_disconnect()
 def get_employees(
     search: Optional[str] = None,
     status: Optional[str] = None,
@@ -55,10 +74,13 @@ def get_employees(
     # Check if user is Admin, RH or Direction
     is_privileged = current_user.role in ["admin_rh", "resp_rh", "direction"]
     
+    # Fetch departments separately to avoid join errors if FK is missing
+    dept_resp = supabase.table("departments").select("id, name").execute()
+    dept_map = {d["id"]: d["name"] for d in dept_resp.data} if dept_resp.data else {}
+
     query = supabase.table("employees").select(
         "id, first_name, last_name, professional_email, "
-        "position, department_id, status, contract_type, hire_date, "
-        "departments(name)"
+        "position, department_id, status, contract_type, hire_date"
     )
 
     if is_privileged:
@@ -95,7 +117,7 @@ def get_employees(
             "id": e["id"],
             "name": f"{e.get('first_name', '')} {e.get('last_name', '')}".strip(),
             "role": e.get("position") or "—",
-            "dept": e.get("departments", {}).get("name") if e.get("departments") else "—",
+            "dept": dept_map.get(e.get("department_id"), "—"),
             "status": e.get("status") or "active",
             "contract": e.get("contract_type") or "CDI",
             "hired": e.get("hire_date") or "",
@@ -105,6 +127,7 @@ def get_employees(
 
 
 @router.get("/employees/stats")
+@retry_on_disconnect()
 def get_employee_stats(current_user: User = Depends(get_current_user)):
     require_role(current_user, ["admin_rh", "resp_rh", "direction"])
 
@@ -131,6 +154,7 @@ def get_employee_stats(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/employees/{employee_id}")
+@retry_on_disconnect()
 def get_employee_detail(
     employee_id: str,
     current_user: User = Depends(get_current_user),
@@ -155,19 +179,28 @@ def get_employee_detail(
 
     result = (
         supabase.table("employees")
-        .select("*, departments(name), managers:manager_id(first_name, last_name)")
+        .select("*")
         .eq("id", employee_id)
         .limit(1)
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Employé non trouvé")
-
     e = result.data[0]
+
+    # Fetch manager name manually if manager_id exists
     manager_name = "—"
-    if e.get("managers"):
-        m = e.get("managers")
-        manager_name = f"{m.get('first_name', '')} {m.get('last_name', '')}".strip()
+    if e.get("manager_id"):
+        m_res = supabase.table("employees").select("first_name, last_name").eq("id", e["manager_id"]).execute()
+        if m_res.data:
+            manager_name = f"{m_res.data[0].get('first_name', '')} {m_res.data[0].get('last_name', '')}".strip()
+
+    # Fetch department name manually
+    dept_name = "—"
+    if e.get("department_id"):
+        d_res = supabase.table("departments").select("name").eq("id", e["department_id"]).execute()
+        if d_res.data:
+            dept_name = d_res.data[0].get("name", "—")
 
     return {
         "id": e["id"],
@@ -175,7 +208,7 @@ def get_employee_detail(
         "email": e.get("professional_email") or "",
         "phone": e.get("professional_phone") or "",
         "address": e.get("address") or "",
-        "dept": e.get("departments", {}).get("name") if e.get("departments") else "—",
+        "dept": dept_name,
         "role": e.get("position") or "—",
         "hired": e.get("hire_date") or "",
         "contract": e.get("contract_type") or "CDI",
@@ -205,6 +238,7 @@ def get_employee_detail(
 # ─── Contracts (Embedded in Employees Table) ─────────────────────────────────
 
 @router.get("/contracts")
+@retry_on_disconnect()
 def get_contracts(
     status: Optional[str] = None,
     contract_type: Optional[str] = None,
@@ -214,7 +248,7 @@ def get_contracts(
 
     try:
         query = supabase.table("employees").select(
-            "id, first_name, last_name, contract_type, contract_start, contract_end, contract_status, contract_url"
+            "id, first_name, last_name, contract_type, contract_start, contract_end, contract_status"
         )
         if status:
             query = query.eq("contract_status", status)
@@ -253,7 +287,6 @@ def get_contracts(
             "end": e.get("contract_end"),
             "status": e.get("contract_status") or "actif",
             "alert": compute_alert(e),
-            "contract_url": e.get("contract_url"),
         }
         for e in employees
     ]
@@ -287,7 +320,55 @@ def get_contract_alerts(current_user: User = Depends(get_current_user)):
 
 # ─── Attendance / Pointage ────────────────────────────────────────────────────
 
+@router.get("/conges")
+@retry_on_disconnect()
+def get_all_conges(contract_type: Optional[str] = None, current_user: User = Depends(get_current_user)):
+    require_role(current_user, ["admin_rh", "resp_rh"])
+    
+    # Fetch employees for manual join and filtering
+    emp_query = supabase.table("employees").select("id, first_name, last_name, contract_type")
+    if contract_type:
+        emp_query = emp_query.eq("contract_type", contract_type)
+    
+    emp_res = emp_query.execute()
+    emp_ids = [e["id"] for e in emp_res.data] if emp_res.data else []
+    emp_map = {e["id"]: f"{e.get('first_name', '')} {e.get('last_name', '')}".strip() for e in emp_res.data} if emp_res.data else {}
+
+    if contract_type and not emp_ids:
+        return []
+
+    query = supabase.table("leave_requests").select("*")
+    if contract_type:
+        query = query.in_("employee_id", emp_ids)
+    
+    result = query.order("created_at", desc=True).execute()
+    rows = result.data or []
+
+    return [
+        {
+            "id": r["id"],
+            "employee": emp_map.get(r.get("employee_id"), f"Employé #{r.get('employee_id')}"),
+            "type": r.get("leave_type") or "Congé",
+            "start": r.get("start_date"),
+            "end": r.get("end_date"),
+            "days": float(r.get("days") or 0),
+            "status": r.get("status") or "pending",
+        }
+        for r in rows
+    ]
+
+@router.patch("/conges/{leave_id}/status")
+def update_conge_status(leave_id: int, body: dict, current_user: User = Depends(get_current_user)):
+    require_role(current_user, ["admin_rh", "resp_rh"])
+    status = body.get("status")
+    if status not in ["approved", "rejected", "pending"]:
+        raise HTTPException(status_code=400, detail="Statut invalide")
+    
+    supabase.table("leave_requests").update({"status": status, "updated_at": datetime.now().isoformat()}).eq("id", leave_id).execute()
+    return {"message": "Statut mis à jour"}
+
 @router.get("/pointage")
+@retry_on_disconnect()
 def get_pointage(
     date: Optional[str] = None,
     current_user: User = Depends(get_current_user),
@@ -297,9 +378,13 @@ def get_pointage(
 
     target_date = date or datetime.today().strftime("%Y-%m-%d")
 
+    # Fetch employees for manual join to avoid relationship errors
+    emp_res = supabase.table("employees").select("id, first_name, last_name").execute()
+    emp_map = {e["id"]: f"{e.get('first_name', '')} {e.get('last_name', '')}".strip() for e in emp_res.data} if emp_res.data else {}
+
     result = (
         supabase.table("attendance")
-        .select("*, employees(first_name, last_name)")
+        .select("*")
         .eq("date", target_date)
         .order("created_at")
         .execute()
@@ -310,7 +395,7 @@ def get_pointage(
         {
             "id": r["id"],
             "employee_id": r.get("employee_id"),
-            "employee_name": f"{(r.get('employees') or {}).get('first_name', '')} {(r.get('employees') or {}).get('last_name', '')}".strip(),
+            "employee_name": emp_map.get(r.get("employee_id"), "Inconnu"),
             "date": r.get("date") or target_date,
             "arrival": r.get("clock_in") or "",
             "departure": r.get("clock_out") or "",
@@ -321,15 +406,69 @@ def get_pointage(
         for r in rows
     ]
 
+# APRÈS (correct)
+@router.post("/pointage")
+def create_pointage(body: dict, current_user: User = Depends(get_current_user)):
+    require_role(current_user, ["admin_rh", "resp_rh"])
+    
+    new_p = {
+        "employee_id": body.get("employee_id"),
+        "date": body.get("date"),
+        "clock_in": body.get("arrival"),
+        "clock_out": body.get("departure"),
+        "location": body.get("location", "Siège"),
+        "status": body.get("status", "present"),
+        "created_at": datetime.now().isoformat()
+    }
+    
+    res = supabase.table("attendance").insert(new_p).execute()
+    return res.data[0] if res.data else {"message": "Pointage créé"}
+
+@router.patch("/pointage/{pid}")
+def update_pointage(pid: int, body: dict, current_user: User = Depends(get_current_user)):
+    require_role(current_user, ["admin_rh", "resp_rh"])
+    
+    # Remapper les clés frontend → colonnes DB
+    update_data = {}
+    if "arrival" in body:
+        update_data["clock_in"] = body["arrival"]
+    if "departure" in body:
+        update_data["clock_out"] = body["departure"]
+    if "location" in body:
+        update_data["location"] = body["location"]
+    if "status" in body:
+        update_data["status"] = body["status"]
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Aucun champ valide à mettre à jour")
+
+    supabase.table("attendance").update(update_data).eq("id", pid).execute()
+    return {"message": "Mis à jour"}
+
 
 # ─── Dashboard ────────────────────────────────────────────────────────────────
+
+@router.get("/surveys", tags=["resp_rh"])
+def get_surveys(current_user: User = Depends(get_current_user)):
+    """List all surveys"""
+    # Placeholder: surveys could be in a 'surveys' table
+    try:
+        response = supabase.table("surveys").select("*").execute()
+        return response.data or []
+    except:
+        return [
+            {"id": 1, "title": "Satisfaction QVT 2026", "status": "Active", "responses": 45, "total": 122, "date": "10/05/2026"},
+            {"id": 2, "title": "Besoin en formation Soft Skills", "status": "Terminée", "responses": 110, "total": 122, "date": "01/04/2026"}
+        ]
 
 @router.get("/dashboard")
 def get_resp_rh_dashboard(current_user: User = Depends(get_current_user)):
     require_role(current_user, ["admin_rh", "resp_rh", "direction"])
 
     try:
-        employees = supabase.table("employees").select("id, first_name, last_name, status, contract_type, department_id, contract_end").execute().data or []
+        # Optimisation : Récupérer uniquement les colonnes nécessaires
+        employees_query = supabase.table("employees").select("id, first_name, last_name, status, contract_type, contract_end").execute()
+        employees = employees_query.data or []
         
         today = datetime.today().date()
         active = sum(1 for e in employees if e.get("status") == "active")
@@ -340,7 +479,9 @@ def get_resp_rh_dashboard(current_user: User = Depends(get_current_user)):
             end = e.get("contract_end")
             if end:
                 try:
-                    days = (datetime.fromisoformat(end).date() - today).days
+                    # Gérer les formats de date ISO
+                    end_dt = datetime.fromisoformat(end.replace('Z', '+00:00')).date()
+                    days = (end_dt - today).days
                     if days <= 60:
                         contrats_alert.append(e)
                         if days <= 30:
@@ -352,20 +493,24 @@ def get_resp_rh_dashboard(current_user: User = Depends(get_current_user)):
                                 "action_bouton": "Traiter",
                                 "echeance": end
                             })
-                except:
+                except Exception as e_date:
+                    print(f"Date parsing error for employee {e.get('id')}: {e_date}")
                     pass
 
-        # Congés en attente
-        pending_leaves_resp = supabase.table("leave_requests").select("*, employees(first_name, last_name)").eq("status", "pending").execute()
+        # Map for employee names
+        emp_names = {e["id"]: f"{e.get('first_name', '')} {e.get('last_name', '')}".strip() for e in employees}
+
+        # Congés en attente - Limiter le nombre de résultats pour le dashboard
+        pending_leaves_resp = supabase.table("leave_requests").select("*").eq("status", "pending").order("created_at", desc=True).limit(10).execute()
         pending_leaves = pending_leaves_resp.data or []
         
         conges_data = {
             "demandes_en_attente": [
                 {
                     "id": r["id"],
-                    "collaborateur": f"{r.get('employees', {}).get('first_name', '')} {r.get('employees', {}).get('last_name', '')}",
+                    "collaborateur": emp_names.get(r.get("employee_id"), f"Employé #{r.get('employee_id')}"),
                     "type": r["leave_type"],
-                    "jours": r["days"],
+                    "jours": float(r["days"]) if r.get("days") else 0,
                     "date_debut": r["start_date"]
                 }
                 for r in pending_leaves
@@ -397,6 +542,8 @@ def get_resp_rh_dashboard(current_user: User = Depends(get_current_user)):
             "contrats_60_jours": len(contrats_alert),
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Resp RH dashboard error: {e}")
         return {
             "kpis": {"collaborateurs_actifs": 0, "contrats_a_renouveler": 0},

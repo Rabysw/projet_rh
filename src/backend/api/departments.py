@@ -4,10 +4,12 @@ from datetime import datetime
 
 from auth.auth import get_current_user, User
 from supabase_client import supabase
+from utils.db_utils import retry_on_disconnect
 
 router = APIRouter()
 
 @router.get("/")
+@retry_on_disconnect()
 async def list_departments(
     current_user: User = Depends(get_current_user)
 ):
@@ -16,6 +18,7 @@ async def list_departments(
     return response.data or []
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
+@retry_on_disconnect()
 async def create_department(
     name: str,
     current_user: User = Depends(get_current_user)
@@ -34,6 +37,7 @@ async def create_department(
     return response.data[0]
 
 @router.get("/{department_id}")
+@retry_on_disconnect()
 async def get_department(
     department_id: int,
     current_user: User = Depends(get_current_user)
@@ -49,6 +53,7 @@ async def get_department(
     return response.data[0]
 
 @router.delete("/{department_id}")
+@retry_on_disconnect()
 async def delete_department(
     department_id: int,
     current_user: User = Depends(get_current_user)

@@ -9,7 +9,6 @@ from datetime import datetime
 from io import BytesIO
 
 from auth.auth import get_current_user, User
-from data_store import rh_employees, collab_payslips
 from supabase_client import supabase
 
 from reportlab.lib import colors
@@ -328,18 +327,34 @@ def generate_payslip_pdf(employee, payslip):
 @router.get("/generate/payslip/{payslip_id}")
 def download_payslip(payslip_id: int, current_user: User = Depends(get_current_user)):
     """Download a specific payslip as PDF"""
-    payslip = next((p for p in collab_payslips if p.id == payslip_id), None)
-    if not payslip:
+    # Get payslip from Supabase
+    payslip_resp = supabase.table("payslips").select("*").eq("id", payslip_id).limit(1).execute()
+    if not payslip_resp.data:
         raise HTTPException(status_code=404, detail="Bulletin non trouvé")
+    
+    payslip_data = payslip_resp.data[0]
+    
+    # Get employee from Supabase
+    emp_resp = supabase.table("employees").select("*").eq("id", payslip_data["employee_id"]).limit(1).execute()
+    if not emp_resp.data:
+        raise HTTPException(status_code=404, detail="Employé non trouvé")
+    
+    employee_data = emp_resp.data[0]
+    
+    # Check permissions
+    if current_user.role.lower() not in ["admin_rh", "resp_rh"]:
+        if str(employee_data.get("user_id")) != str(current_user.id):
+            raise HTTPException(status_code=403, detail="Accès refusé")
 
-    employee = next((e for e in rh_employees if e.id == current_user.id), None)
-    if not employee and current_user.role.lower() not in ["admin_rh", "resp_rh"]:
-        raise HTTPException(status_code=403, detail="Accès refusé")
-
-    # Si l'utilisateur est RH/Admin et n'est pas dans rh_employees, on crée un objet minimal pour éviter le crash
-    emp_data = employee.model_dump() if employee else {"first_name": "Admin", "last_name": "ICES", "matricule": "ADMIN", "position": "RH", "hire_date": "N/A"}
-    pdf_buffer = generate_payslip_pdf(emp_data, payslip.model_dump())
-    filename = f"bulletin_{payslip.month.replace(' ', '_')}.pdf"
+    # Adapt data for PDF generation
+    pdf_data = {
+        "month": f"{payslip_data['month']} {payslip_data['year']}",
+        "net": payslip_data["net_amount"],
+        "deductions": payslip_data.get("deductions", [])
+    }
+    
+    pdf_buffer = generate_payslip_pdf(employee_data, pdf_data)
+    filename = f"bulletin_{payslip_data['month'].replace(' ', '_')}_{payslip_data['year']}.pdf"
 
     return StreamingResponse(
         pdf_buffer,

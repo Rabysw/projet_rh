@@ -7,7 +7,7 @@ import type { Department, EmployeeInput, Employee } from "@/types";
 import { ContractType, EmploymentStatus, HRRole } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ArrowLeft, Camera, Save, X } from "lucide-react";
+import { ArrowLeft, Camera, Save, X, DollarSign } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -428,6 +428,23 @@ export default function EditEmployeePage() {
                   </option>
                 ))}
               </select>
+            </FormField>
+
+            <FormField label="Salaire de base (FCFA)" id="edit-base-salary">
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  id="edit-base-salary"
+                  type="text"
+                  value={form.base_salary === 0 ? "" : form.base_salary}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9]/g, "");
+                    set("base_salary", val === "" ? 0 : parseInt(val));
+                  }}
+                  className={inputClass + " pl-10"}
+                  placeholder="0"
+                />
+              </div>
             </FormField>
           </fieldset>
         </div>

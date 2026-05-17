@@ -58,7 +58,7 @@ export default function SuggestionsPage() {
     }
   }, [suggestions]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
     const text = message.trim();
     if (!text) {
       toast.error("Veuillez saisir votre suggestion");
@@ -70,15 +70,16 @@ export default function SuggestionsPage() {
         method: "POST",
         body: JSON.stringify({
           title: text.substring(0, 50) + (text.length > 50 ? "..." : ""),
+          content: text,
           category: selectedCategory,
           anonymous: anonymous
         })
       });
-      toast.success("Suggestion envoyée avec succès !");
+      toast.success("Votre suggestion a été envoyée avec succès !");
       setMessage("");
       refetch();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur lors de l'envoi");
+      toast.error("Erreur lors de l'envoi de la suggestion");
     } finally {
       setIsSubmitting(false);
     }

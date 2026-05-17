@@ -215,36 +215,109 @@ export default function ManagerDashboard() {
         </CardContent>
       </Card>
 
-      {/* Widgets Grid */}
+      {/* Productivité & Calendrier */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-emerald-500" />
+              Productivité de l'équipe
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="p-4 bg-primary/5 border border-primary/10 rounded-lg">
+              <h4 className="text-xs font-bold uppercase text-primary mb-2">Guide d'utilisation</h4>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Ce module analyse les performances basées sur les objectifs (KPIs) et le respect des délais projets (Kanban). 
+                Utilisez les graphiques pour identifier les goulots d'étranglement et planifier vos entretiens One-to-One.
+              </p>
+            </div>
+            <div className="space-y-4">
+              {[
+                { label: "Taux de complétion projets", val: 78, color: "bg-emerald-500" },
+                { label: "Respect des horaires (Moyenne)", val: 92, color: "bg-blue-500" },
+                { label: "Engagement (Enquêtes)", val: 85, color: "bg-amber-500" },
+              ].map((stat) => (
+                <div key={stat.label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span>{stat.label}</span>
+                    <span className="font-bold">{stat.val}%</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-1.5">
+                    <div className={stat.color + " h-1.5 rounded-full"} style={{ width: `${stat.val}%` }}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* Calendrier équipe */}
+        {/* Équipe */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Membres de l'équipe
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {data?.team?.map((member: any) => (
+                <div key={member.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                      {member.name ? member.name.charAt(0).toUpperCase() : "?"}
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{member.name || "Inconnu"}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold">
+                        {member.skills && member.skills.length > 0 ? member.skills.slice(0, 2).join(", ") : "Aucune compétence"}
+                      </p>
+                    </div>
+                  </div>
+                  <span 
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${member.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-muted text-muted-foreground'}`}
+                  >
+                    {member.status === 'active' ? 'Présent' : member.status}
+                  </span>
+                </div>
+              ))}
+              {(!data?.team || data.team.length === 0) && (
+                <p className="text-sm text-muted-foreground py-8 text-center">
+                  Aucun membre d'équipe trouvé
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Calendrier d'équipe */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              Calendrier équipe
+              Calendrier d'équipe
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              Aucune donnée disponible pour le moment
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Évaluations en retard */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-secondary" />
-              Évaluations en retard
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              Aucune donnée disponible pour le moment
-            </p>
+            <div className="flex flex-col">
+              <p className="text-sm text-muted-foreground mb-4">Visualisez les absences et événements à venir</p>
+              <div className="grid grid-cols-7 gap-1 max-w-xs">
+                {[...Array(31)].map((_, i) => (
+                  <div key={i} className={`h-8 w-8 flex items-center justify-center text-[10px] rounded ${
+                    [5, 12, 18].includes(i+1) ? 'bg-primary text-white font-bold' : 
+                    [6, 7, 13, 14, 20, 21, 27, 28].includes(i+1) ? 'bg-muted text-muted-foreground' : 
+                    'bg-muted/30'
+                  }`}>
+                    {i + 1}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex gap-4 text-[10px]">
+                <div className="flex items-center gap-1"><div className="w-2 h-2 bg-primary rounded"></div> Congés</div>
+                <div className="flex items-center gap-1"><div className="w-2 h-2 bg-muted rounded"></div> Weekend</div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

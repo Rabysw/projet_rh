@@ -93,6 +93,9 @@ app.include_router(leave_router, prefix="/api/v1/leave", tags=["leave"])
 from api.documents import router as documents_router
 app.include_router(documents_router, prefix="/api/v1/documents", tags=["documents"])
 
+from api.ia import router as ia_router
+app.include_router(ia_router, prefix="/api/v1/ia", tags=["ia"])
+
 @app.get("/")
 async def root():
     return {"message": "ICES HR Platform API", "version": "1.0.0"}

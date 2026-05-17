@@ -36,12 +36,14 @@ interface EmployeeStats {
 export default function EmployeesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [contractFilter, setContractFilter] = useState("");
   const deferredSearch = useDeferredValue(search);
 
   // Build query params
   const params = new URLSearchParams();
   if (deferredSearch) params.set("search", deferredSearch);
   if (statusFilter) params.set("status", statusFilter);
+  if (contractFilter) params.set("contract_type", contractFilter);
   const query = params.toString();
 
   const { data: employees, isLoading, error } = useApi<Employee[]>(
@@ -102,6 +104,17 @@ export default function EmployeesPage() {
           <option value="active">Actif</option>
           <option value="on_leave">En congé</option>
           <option value="inactive">Inactif</option>
+        </select>
+        <select
+          className="px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          value={contractFilter}
+          onChange={(e) => setContractFilter(e.target.value)}
+        >
+          <option value="">Tous les contrats</option>
+          <option value="CDI">CDI</option>
+          <option value="CDD">CDD</option>
+          <option value="Internship">Stage</option>
+          <option value="Freelance">Freelance</option>
         </select>
       </div>
 

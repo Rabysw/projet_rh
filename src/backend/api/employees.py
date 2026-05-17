@@ -10,12 +10,14 @@ from models.employee import (
 )
 from auth.auth import get_current_user, User
 from supabase_client import supabase
+from utils.db_utils import retry_on_disconnect
 
 router = APIRouter()
 
 import bcrypt
 
 @router.post("/", response_model=Employee, status_code=status.HTTP_201_CREATED)
+@retry_on_disconnect()
 async def create_employee(
     employee_data: EmployeeInput,
     current_user: User = Depends(get_current_user)
@@ -35,8 +37,9 @@ async def create_employee(
         "email": employee_data.professional_email or employee_data.email,
         "password_hash": hashed_password,
         "role": employee_data.hr_role.value.lower() if employee_data.hr_role else "collaborateur",
-        "nom": f"{employee_data.first_name} {employee_data.last_name}",
-        "is_active": True,
+        "prenom": employee_data.first_name,
+        "nom": employee_data.last_name,
+        "status": "active",
         "created_at": datetime.now().isoformat()
     }
     
@@ -106,6 +109,7 @@ async def create_employee(
     return Employee(**new_emp)
 
 @router.get("/", response_model=PaginatedEmployees)
+@retry_on_disconnect()
 async def list_employees(
     search: Optional[str] = None,
     status: Optional[str] = None,
@@ -137,6 +141,7 @@ async def list_employees(
     )
 
 @router.get("/{employee_id}", response_model=Employee)
+@retry_on_disconnect()
 async def get_employee(
     employee_id: int,
     current_user: User = Depends(get_current_user)
@@ -149,6 +154,7 @@ async def get_employee(
     return Employee(**result.data[0])
 
 @router.put("/{employee_id}", response_model=Employee)
+@retry_on_disconnect()
 async def update_employee(
     employee_id: int,
     employee_data: EmployeeInput,
@@ -192,6 +198,7 @@ async def update_employee(
     return Employee(**result.data[0])
 
 @router.delete("/{employee_id}")
+@retry_on_disconnect()
 async def delete_employee(
     employee_id: int,
     current_user: User = Depends(get_current_user)
@@ -214,6 +221,7 @@ async def delete_employee(
     return {"message": "Employee deleted successfully"}
 
 @router.post("/{employee_id}/profile-picture")
+@retry_on_disconnect()
 async def set_employee_profile_picture(
     employee_id: int,
     file: UploadFile = File(...),

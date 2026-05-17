@@ -8,11 +8,8 @@ import DirectionDashboard from "./dashboards/DirectionDashboard";
 export default function DashboardPage() {
   const { user } = useIcesAuth();
 
-  if (!user) {
-    return <div>Chargement...</div>;
-  }
+  if (!user) return null;
 
-  // Rediriger vers le dashboard approprié selon le rôle
   switch (user.role) {
     case "collaborateur":
       return <CollaborateurDashboard />;

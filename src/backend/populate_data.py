@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from supabase import create_client
 from dotenv import load_dotenv
 
-load_dotenv("src/backend/.env")
+load_dotenv(".env")
 
 url = os.environ.get("SUPABASE_URL")
 key = os.environ.get("SUPABASE_KEY")
@@ -83,11 +83,11 @@ def populate():
     # 3. Add Skills for Thomas (collab)
     if "collaborateur" in employee_ids:
         skills = [
-            (employee_ids["collaborateur"], "React", 85),
-            (employee_ids["collaborateur"], "FastAPI", 70),
-            (employee_ids["collaborateur"], "PostgreSQL", 60),
-            (employee_ids["collaborateur"], "Docker", 40),
-            (employee_ids["collaborateur"], "Agile", 90),
+            (employee_ids["collaborateur"], "React", 4),
+            (employee_ids["collaborateur"], "FastAPI", 4),
+            (employee_ids["collaborateur"], "PostgreSQL", 3),
+            (employee_ids["collaborateur"], "Docker", 2),
+            (employee_ids["collaborateur"], "Agile", 5),
         ]
         for s in skills:
             cur.execute("""
@@ -101,12 +101,12 @@ def populate():
     # 4. Add Evaluations
     if "collaborateur" in employee_ids:
         evals = [
-            (employee_ids["collaborateur"], "2023-12-20", "Annuelle", 88, "completed", True, True),
-            (employee_ids["collaborateur"], "2024-05-10", "Mi-parcours", 92, "pending", False, False),
+            (employee_ids["collaborateur"], employee_ids["manager"], "2023-12-20", "Annuelle", 8.8, "completed", "Goals met"),
+            (employee_ids["collaborateur"], employee_ids["manager"], "2024-05-10", "Mi-parcours", 9.2, "pending", "In progress"),
         ]
         for ev in evals:
             cur.execute("""
-                INSERT INTO evaluations (employee_id, evaluation_date, evaluation_type, score, status, employee_signed, rh_signed)
+                INSERT INTO evaluations (employee_id, evaluator_id, evaluation_date, period, score, status, goals_met)
                 VALUES (%s, %s, %s, %s, %s, %s, %s);
             """, ev)
         print("Evaluations added.")

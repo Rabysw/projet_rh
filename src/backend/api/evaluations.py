@@ -5,9 +5,11 @@ import uuid
 
 from auth.auth import get_current_user, User
 from supabase_client import supabase
+from utils.db_utils import retry_on_disconnect
 
 router = APIRouter()
 
+@retry_on_disconnect()
 def resolve_employee_id(emp_id_or_user_id: str) -> int:
     """
     Tente de convertir l'ID en entier. Si c'est un UUID, 
@@ -27,11 +29,12 @@ def resolve_employee_id(emp_id_or_user_id: str) -> int:
             raise HTTPException(status_code=400, detail="Format d'ID invalide")
 
 @router.get("/competences/radar/{employee_id}")
+@retry_on_disconnect()
 def get_competences_radar(employee_id: str, current_user: User = Depends(get_current_user)):
     """Module 02 - Données pour le graphique radar des compétences"""
     resolved_id = resolve_employee_id(employee_id)
     response = supabase.table("skills").select("*").eq("employee_id", resolved_id).execute()
-    skills = response.data
+    skills = response.data or []
     
     return {
         "labels": [s['skill_name'] for s in skills],
@@ -40,11 +43,12 @@ def get_competences_radar(employee_id: str, current_user: User = Depends(get_cur
     }
 
 @router.get("/competences/gaps/{employee_id}")
+@retry_on_disconnect()
 def get_competences_gaps(employee_id: str, current_user: User = Depends(get_current_user)):
     """Analyse des écarts de compétences"""
     resolved_id = resolve_employee_id(employee_id)
     response = supabase.table("skills").select("*").eq("employee_id", resolved_id).execute()
-    skills = response.data
+    skills = response.data or []
     
     gaps = []
     for s in skills:
@@ -61,6 +65,7 @@ def get_competences_gaps(employee_id: str, current_user: User = Depends(get_curr
     return gaps
 
 @router.post("/{evaluation_id}/signer")
+@retry_on_disconnect()
 def sign_evaluation(evaluation_id: str, current_user: User = Depends(get_current_user)):
     """Signature électronique avec horodatage"""
     timestamp = datetime.now().isoformat()
@@ -84,15 +89,21 @@ def sign_evaluation(evaluation_id: str, current_user: User = Depends(get_current
     raise HTTPException(status_code=403, detail="Rôle non autorisé pour la signature")
 
 @router.post("/pdi")
+@retry_on_disconnect()
 def create_pdi(pdi: dict, current_user: User = Depends(get_current_user)):
     """Création ou mise à jour d'un Plan de Développement Individuel"""
     if current_user.role not in ["manager", "resp_rh", "admin_rh"]:
         raise HTTPException(status_code=403, detail="Seuls les managers ou RH peuvent créer un PDI")
     
-    # Mocking for demo
-    return {"message": "PDI enregistré avec succès", "id": 1}
+    try:
+        # We'll use development_goals as a PDI item
+        response = supabase.table("development_goals").insert(pdi).execute()
+        return {"message": "PDI enregistré avec succès", "id": response.data[0]['id'] if response.data else None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating PDI: {str(e)}")
 
 @router.post("/commentaires")
+@retry_on_disconnect()
 def add_evaluation_comment(comment: dict, current_user: User = Depends(get_current_user)):
     """Module 02 - Ajout d'un commentaire sur une évaluation ou un objectif"""
     if current_user.role not in ["manager", "resp_rh", "admin_rh"]:
@@ -101,6 +112,7 @@ def add_evaluation_comment(comment: dict, current_user: User = Depends(get_curre
     return {"message": "Commentaire ajouté", "timestamp": datetime.now().isoformat()}
 
 @router.get("/career/{employee_id}")
+@retry_on_disconnect()
 def get_career_plan(employee_id: str, current_user: User = Depends(get_current_user)):
     """Module 04 - Plan de carrière complet"""
     resolved_id = resolve_employee_id(employee_id)
@@ -112,6 +124,7 @@ def get_career_plan(employee_id: str, current_user: User = Depends(get_current_u
     }
 
 @router.post("/career/entretiens/{entretien_id}/signer")
+@retry_on_disconnect()
 def sign_career_entretien(entretien_id: str, current_user: User = Depends(get_current_user)):
     """Double signature électronique horodatée"""
     timestamp = datetime.now().isoformat()
@@ -122,6 +135,7 @@ def sign_career_entretien(entretien_id: str, current_user: User = Depends(get_cu
     }
 
 @router.get("/list/{employee_id}")
+@retry_on_disconnect()
 def get_evaluations_list(employee_id: str, current_user: User = Depends(get_current_user)):
     """Liste des évaluations pour un collaborateur"""
     resolved_id = resolve_employee_id(employee_id)
@@ -129,12 +143,10 @@ def get_evaluations_list(employee_id: str, current_user: User = Depends(get_curr
     return response.data or []
 
 @router.get("/pdi/{employee_id}")
+@retry_on_disconnect()
 def get_pdi(employee_id: str, current_user: User = Depends(get_current_user)):
-    """Récupération du PDI d'un collaborateur"""
+    """Récupération du PDI d'un collaborateur (via development_goals)"""
     resolved_id = resolve_employee_id(employee_id)
-    # Vérification des droits (soit soi-même, soit manager/RH)
-    # Note: current_user.id est un UUID, alors que resolved_id est un int.
-    # Pour vérifier si c'est soi-même, on compare current_user.id au user_id de l'employé.
     
     emp_resp = supabase.table("employees").select("user_id").eq("id", resolved_id).limit(1).execute()
     if not emp_resp.data:
@@ -145,7 +157,7 @@ def get_pdi(employee_id: str, current_user: User = Depends(get_current_user)):
     if current_user.role == "collaborateur" and str(current_user.id) != emp_user_id:
         raise HTTPException(status_code=403, detail="Accès refusé")
         
-    response = supabase.table("pdis").select("*").eq("employee_id", resolved_id).execute()
+    response = supabase.table("development_goals").select("*").eq("employee_id", resolved_id).execute()
     if not response.data:
         return {"message": "Aucun PDI trouvé pour ce collaborateur"}
-    return response.data[0]
+    return response.data[0] # Retourne le premier objectif ou le PDI lié

@@ -10,10 +10,14 @@ import {
   FileUp,
   Loader2,
   CheckCircle2,
-  XCircle,
   Plus,
   X,
   Clock,
+  Calendar,
+  Download,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
@@ -193,6 +197,7 @@ export default function AttendancePage() {
   const { data: pointages, isLoading, refetch } = useApi<Pointage[]>(
     `/api/v1/resp-rh/pointage?date=${date}`
   );
+  const { data: employees } = useApi<any[]>("/api/v1/resp-rh/managers");
 
   const filtered = useMemo(() => {
     if (!pointages) return [];
@@ -200,6 +205,12 @@ export default function AttendancePage() {
     const s = search.toLowerCase();
     return pointages.filter((p) => p.employee_name.toLowerCase().includes(s));
   }, [pointages, search]);
+
+  const missingEmployees = useMemo(() => {
+    if (!employees || !pointages) return [];
+    const pointedIds = new Set(pointages.map((p) => p.employee_id));
+    return employees.filter((e) => !pointedIds.has(e.id));
+  }, [employees, pointages]);
 
   const handleUpdatePointage = async (id: number, field: string, value: string) => {
     try {
@@ -211,6 +222,24 @@ export default function AttendancePage() {
       refetch();
     } catch (err) {
       toast.error("Erreur lors de la mise à jour");
+    }
+  };
+
+  const handleMarkPresent = async (employeeId: number) => {
+    try {
+      await apiFetch("/api/v1/resp-rh/pointage", {
+        method: "POST",
+        body: JSON.stringify({ 
+          employee_id: employeeId, 
+          date: date,
+          arrival: "08:00",
+          status: "present"
+        }),
+      });
+      toast.success("Employé marqué comme présent");
+      refetch();
+    } catch (err) {
+      toast.error("Erreur lors du marquage");
     }
   };
 
@@ -325,8 +354,7 @@ export default function AttendancePage() {
                     <th className="px-4 py-3 text-left font-medium">Départ</th>
                     <th className="px-4 py-3 text-left font-medium">Lieu</th>
                     <th className="px-4 py-3 text-left font-medium">Statut</th>
-                    <th className="px-4 py-3 text-left font-medium">Heures sup.</th>
-                    <th className="px-4 py-3 text-left font-medium">Justificatif</th>
+                    <th className="px-4 py-3 text-left font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -334,20 +362,26 @@ export default function AttendancePage() {
                     <tr key={p.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3 font-medium">{p.employee_name}</td>
                       <td className="px-4 py-3">
-                        <input
-                          type="time"
-                          className="bg-muted/30 border border-transparent hover:border-border focus:border-primary rounded px-2 py-1 text-sm outline-none transition-colors"
-                          value={p.arrival || ""}
-                          onChange={(e) => handleUpdatePointage(p.id, "arrival", e.target.value)}
-                        />
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] uppercase text-muted-foreground font-bold">Matin (Entrée)</label>
+                          <input
+                            type="time"
+                            className="bg-muted/30 border border-transparent hover:border-border focus:border-primary rounded px-2 py-1 text-sm outline-none transition-colors"
+                            value={p.arrival || ""}
+                            onChange={(e) => handleUpdatePointage(p.id, "arrival", e.target.value)}
+                          />
+                        </div>
                       </td>
                       <td className="px-4 py-3">
-                        <input
-                          type="time"
-                          className="bg-muted/30 border border-transparent hover:border-border focus:border-primary rounded px-2 py-1 text-sm outline-none transition-colors"
-                          value={p.departure || ""}
-                          onChange={(e) => handleUpdatePointage(p.id, "departure", e.target.value)}
-                        />
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] uppercase text-muted-foreground font-bold">Soir (Sortie)</label>
+                          <input
+                            type="time"
+                            className="bg-muted/30 border border-transparent hover:border-border focus:border-primary rounded px-2 py-1 text-sm outline-none transition-colors"
+                            value={p.departure || ""}
+                            onChange={(e) => handleUpdatePointage(p.id, "departure", e.target.value)}
+                          />
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <select
@@ -364,26 +398,29 @@ export default function AttendancePage() {
                       <td className="px-4 py-3">
                         <StatusBadge status={p.status} />
                       </td>
-                      <td className="px-4 py-3">
-                        {p.overtime > 0 ? (
-                          <span className="text-emerald-600 font-bold">+{p.overtime}h</span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-xs text-muted-foreground italic">Pointé</span>
                       </td>
+                    </tr>
+                  ))}
+                  {missingEmployees.map((emp) => (
+                    <tr key={`missing-${emp.id}`} className="hover:bg-muted/20 transition-colors opacity-80">
+                      <td className="px-4 py-3 font-medium">{emp.first_name} {emp.last_name}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">—</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">—</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">—</td>
                       <td className="px-4 py-3">
-                        <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
-                          {p.has_justificatif ? (
-                            <>
-                              <CheckCircle2 size={12} className="text-emerald-500" />
-                              Voir
-                            </>
-                          ) : (
-                            <>
-                              <FileUp size={12} />
-                              Upload
-                            </>
-                          )}
+                        <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200">Absent</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="h-8 gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                          onClick={() => handleMarkPresent(emp.id)}
+                        >
+                          <CheckCircle2 size={14} />
+                          Présent
                         </Button>
                       </td>
                     </tr>

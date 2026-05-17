@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from auth.auth import get_current_user, User
 from supabase_client import supabase
 from datetime import datetime
+from utils.db_utils import retry_on_disconnect
 
 router = APIRouter()
 
 @router.get("/manager")
+@retry_on_disconnect()
 def get_manager_dashboard(current_user: User = Depends(get_current_user)):
     if current_user.role != "manager":
         raise HTTPException(status_code=403, detail="Non autorisé")
@@ -63,6 +65,7 @@ def get_manager_dashboard(current_user: User = Depends(get_current_user)):
         }
 
 @router.get("/collaborateur")
+@retry_on_disconnect()
 def get_collaborator_dashboard(current_user: User = Depends(get_current_user)):
     try:
         emp = supabase.table("employees").select("id").eq("user_id", current_user.id).limit(1).execute()
@@ -83,10 +86,11 @@ def get_collaborator_dashboard(current_user: User = Depends(get_current_user)):
         enrollments = supabase.table("training_enrollments").select("*").eq("employee_id", emp_id).execute() if emp_id else None
         formations_planifiees = len(enrollments.data) if enrollments and enrollments.data else 0
 
-        # Notifications (simulées via les changements de statut des congés)
+        # Notifications (basées sur les changements de statut des congés)
         notifications = []
         if emp_id:
-            leave_reqs = supabase.table("leave_requests").select("*").eq("employee_id", emp_id).execute()
+            # Optimisation : Limiter aux 5 dernières notifications
+            leave_reqs = supabase.table("leave_requests").select("*").eq("employee_id", emp_id).order("updated_at", desc=True).limit(5).execute()
             for req in (leave_reqs.data or []):
                 if req["status"] != "pending":
                     notifications.append({
@@ -97,6 +101,55 @@ def get_collaborator_dashboard(current_user: User = Depends(get_current_user)):
                     })
 
         # Prochaine formation
+        next_training = "Aucune formation prévue"
+        if emp_id:
+            try:
+                next_t = supabase.table("training_enrollments").select("*, trainings(title, start_date)").eq("employee_id", emp_id).eq("status", "enrolled").order("trainings(start_date)").limit(1).execute()
+                if next_t.data:
+                    t_info = next_t.data[0].get("trainings", {})
+                    next_training = f"{t_info.get('title')} ({t_info.get('start_date')})"
+            except:
+                pass
+
+        # Présence
+        presence_stats = {"heures_semaine": 35, "retards_mois": 0, "absences_mois": 0}
+        if emp_id:
+            try:
+                # Count lates this month
+                first_day = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+                lates = supabase.table("attendance").select("id").eq("employee_id", emp_id).eq("status", "late").gte("date", first_day).execute()
+                presence_stats["retards_mois"] = len(lates.data) if lates.data else 0
+            except:
+                pass
+
+        return {
+            "kpis": {
+                "conges_restants": float(restants),
+                "formations_planifiees": formations_planifiees,
+                "demandes_en_cours": demandes_en_cours,
+                "taux_objectifs_atteints": 85, # Mock
+                "heures_supplementaires": 0,
+                "notifications_non_lues": len(notifications)
+            },
+            "solde_conges": {
+                "pris": float(pris),
+                "restants": float(restants),
+                "total": float(total),
+                "exceptionnels": 0
+            },
+            "presence": presence_stats,
+            "next_training": next_training,
+            "notifications": notifications
+        }
+    except Exception as e:
+        print(f"Dashboard collab error: {e}")
+        return {
+            "kpis": {"conges_restants": 0, "formations_planifiees": 0, "demandes_en_cours": 0},
+            "solde_conges": {"pris": 0, "restants": 0, "total": 25},
+            "presence": {"heures_semaine": 0, "retards_mois": 0, "absences_mois": 0},
+            "next_training": "Erreur de chargement",
+            "notifications": []
+        }
         prochaine_formation = {"titre": "Aucune", "date_debut": "-", "statut": "N/A"}
         if enrollments and enrollments.data:
             enr = enrollments.data[0]
@@ -157,17 +210,19 @@ def get_collaborator_dashboard(current_user: User = Depends(get_current_user)):
 @router.get("/resp-rh")
 def get_resp_rh_dashboard(current_user: User = Depends(get_current_user)):
     # Stats employés
-    employees = supabase.table("employees").select("*").execute()
-    total = len(employees.data) if employees.data else 0
-    actifs = len([e for e in (employees.data or []) if e.get("status") == "active"])
+    employees_count = supabase.table("employees").select("id", count="exact").execute()
+    total = employees_count.count if hasattr(employees_count, 'count') else len(employees_count.data)
+    
+    active_count = supabase.table("employees").select("id", count="exact").eq("status", "active").execute()
+    actifs = active_count.count if hasattr(active_count, 'count') else len(active_count.data)
 
     # Congés en attente
-    pending = supabase.table("leave_requests").select("id").eq("status", "pending").execute()
-    conges_attente = len(pending.data) if pending.data else 0
+    pending = supabase.table("leave_requests").select("id", count="exact").eq("status", "pending").execute()
+    conges_attente = pending.count if hasattr(pending, 'count') else len(pending.data)
 
     # Contrats actifs
-    contracts = supabase.table("employees").select("id").eq("contract_status", "actif").execute()
-    contrats_actifs = len(contracts.data) if contracts.data else 0
+    contracts = supabase.table("employees").select("id", count="exact").eq("contract_status", "actif").execute()
+    contrats_actifs = contracts.count if hasattr(contracts, 'count') else len(contracts.data)
 
     return {
         "kpis": {
@@ -183,21 +238,53 @@ def get_resp_rh_dashboard(current_user: User = Depends(get_current_user)):
 
 @router.get("/admin")
 def get_admin_dashboard(current_user: User = Depends(get_current_user)):
-    users = supabase.table("users").select("*").execute()
-    total_users = len(users.data) if users.data else 0
-    
-    return {
-        "kpis": {
-            "total_users": total_users,
-            "active_users": total_users,
-            "security_alerts": 0,
-            "system_health": "Optimal",
-            "backups_status": "Effectué",
-            "active_workflows": 0
-        },
-        "logs": [],
-        "system_status": "Online"
-    }
+    if current_user.role != "admin_rh":
+        raise HTTPException(status_code=403, detail="Non autorisé")
+        
+    try:
+        # Optimisation : utiliser count pour les KPIs au lieu de tout charger
+        # Note: Supabase Python client count is slightly different, but select("id", count="exact") works
+        users_count = supabase.table("users").select("id", count="exact").execute()
+        total_users = users_count.count if hasattr(users_count, 'count') else len(users_count.data)
+        
+        # Récupérer aussi les congés en attente pour l'admin
+        pending_leaves = supabase.table("leave_requests").select("*, employees(first_name, last_name)").eq("status", "pending").order("created_at", desc=True).limit(5).execute()
+        conges_en_attente_count = len(pending_leaves.data) if pending_leaves.data else 0
+
+        # Récupérer les 5 derniers logs/utilisateurs créés
+        recent_users = supabase.table("users").select("email, role, created_at").order("created_at", desc=True).limit(5).execute()
+
+        return {
+            "kpis": {
+                "total_users": total_users,
+                "active_users": total_users,
+                "conges_en_attente": conges_en_attente_count,
+                "roles_configured": 5, 
+                "security_alerts": 0,
+                "system_health": "Optimal",
+                "backups_status": "Effectué",
+                "active_workflows": 0
+            },
+            "recent_users": recent_users.data or [],
+            "pending_leaves": [
+                {
+                    "id": r["id"],
+                    "collaborateur": f"{r.get('employees', {}).get('first_name', '')} {r.get('employees', {}).get('last_name', '')}".strip(),
+                    "type": r["leave_type"],
+                    "jours": float(r["days"]) if r.get("days") else 0,
+                    "date_debut": r["start_date"]
+                }
+                for r in (pending_leaves.data or [])
+            ],
+            "system_status": "Online"
+        }
+    except Exception as e:
+        print(f"Admin dashboard error: {e}")
+        return {
+            "kpis": {"total_users": 0, "active_users": 0, "conges_en_attente": 0},
+            "recent_users": [],
+            "system_status": "Degraded"
+        }
 
 @router.get("/direction")
 def get_direction_dashboard(current_user: User = Depends(get_current_user)):

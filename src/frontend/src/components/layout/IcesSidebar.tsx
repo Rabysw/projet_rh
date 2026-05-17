@@ -117,7 +117,7 @@ const getSidebarItems = (role: string): SidebarItem[] => {
         { id: "dossiers_personnel",label: "Dossiers du personnel",    icon: Users,         route: "/rh-employees" },
         { id: "contrats_avenants", label: "Contrats & avenants",      icon: FileText,      route: "/rh-contracts" },
         { id: "presence_horaires", label: "Présences",               icon: Clock,         route: "/rh-attendance" },
-        { id: "conges_absences",   label: "Congés",                  icon: Calendar,      route: "/leave" },
+        { id: "conges_absences",   label: "Congés",                  icon: Calendar,      route: "/rh-conges" },
         { id: "formation",         label: "Formation",               icon: Book,          route: "/trainings" },
         { id: "evaluations",       label: "Évaluations",             icon: Award,         route: "/evaluations" },
         { id: "plans_carriere",    label: "Plans de carrière",        icon: TrendingUp,    route: "/career" },

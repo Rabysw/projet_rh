@@ -163,7 +163,10 @@ export default function EmployeeDetailPage() {
             <Download className="h-4 w-4" />
             Exporter PDF
           </Button>
-          <Button className="gap-2">
+          <Button 
+            className="gap-2"
+            onClick={() => navigate({ to: `/rh-employees/${id}/edit` })}
+          >
             <Edit className="h-4 w-4" />
             Modifier le dossier
           </Button>

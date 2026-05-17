@@ -52,9 +52,26 @@ const RHContractsPage = lazy(() => import("@/pages/resp_rh/ContractsPage"));
 // Admin RH pages
 const AdminUsersPage = lazy(() => import("@/pages/admin_rh/UsersPage"));
 const AdminConfigPage = lazy(() => import("@/pages/admin_rh/ConfigPage"));
+const AdminRolesPage = lazy(() => import("@/pages/admin_rh/RolesPage"));
+const AdminSecurityPage = lazy(() => import("@/pages/admin_rh/SecurityPage"));
+const AdminLogsPage = lazy(() => import("@/pages/admin_rh/LogsPage"));
+const AdminBackupsPage = lazy(() => import("@/pages/admin_rh/BackupsPage"));
+const AdminNotificationsPage = lazy(() => import("@/pages/admin_rh/NotificationsPage"));
 
 // Direction pages
 const DirectionReportsPage = lazy(() => import("@/pages/direction/ReportsPage"));
+const DirectionKpiPage = lazy(() => import("@/pages/direction/KpiPage"));
+const DirectionAnalyticsPage = lazy(() => import("@/pages/direction/AnalyticsPage"));
+const DirectionExportsPage = lazy(() => import("@/pages/direction/ExportsPage"));
+
+// IA pages
+const ChatbotPage = lazy(() => import("@/pages/ia/ChatbotPage"));
+const IaDocumentsPage = lazy(() => import("@/pages/ia/IaDocumentsPage"));
+const TurnoverPage = lazy(() => import("@/pages/ia/TurnoverPage"));
+const MatchingPage = lazy(() => import("@/pages/ia/MatchingPage"));
+
+const RHCongesPage = lazy(() => import("@/pages/resp_rh/RHCongesPage"));
+const EnquetesPage = lazy(() => import("@/pages/resp_rh/EnquetesPage"));
 
 // Setup page
 const SetupPage = lazy(() => import("@/pages/admin/SetupPage"));
@@ -291,7 +308,7 @@ const rhCongesRoute = createRoute({
   component: () => (
     <Suspense fallback={<PageLoader />}>
       <RoleGuard allowed={["resp_rh", "admin_rh"]}>
-        <div className="p-6">Module Congés RH (En cours de développement)</div>
+        <RHCongesPage />
       </RoleGuard>
     </Suspense>
   ),
@@ -303,7 +320,7 @@ const enquetesRoute = createRoute({
   component: () => (
     <Suspense fallback={<PageLoader />}>
       <RoleGuard allowed={["resp_rh", "admin_rh"]}>
-        <div className="p-6">Module Enquêtes (En cours de développement)</div>
+        <EnquetesPage />
       </RoleGuard>
     </Suspense>
   ),
@@ -519,6 +536,66 @@ const adminUsersRoute = createRoute({
   ),
 });
 
+const adminRolesRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/admin-roles",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["admin_rh"]}>
+        <AdminRolesPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const adminSecurityRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/admin-securite",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["admin_rh"]}>
+        <AdminSecurityPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const adminLogsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/admin-logs",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["admin_rh"]}>
+        <AdminLogsPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const adminNotificationsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/admin-notifications",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["admin_rh"]}>
+        <AdminNotificationsPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const adminBackupsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/admin-sauvegardes",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["admin_rh"]}>
+        <AdminBackupsPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
 const adminConfigRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: "/admin/configuration",
@@ -539,6 +616,82 @@ const directionReportsRoute = createRoute({
       <RoleGuard allowed={["direction", "admin_rh"]}>
         <DirectionReportsPage />
       </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const directionKpiRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/direction-kpis",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["direction", "admin_rh"]}>
+        <DirectionKpiPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const directionAnalyticsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/direction-analytics",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["direction", "admin_rh"]}>
+        <DirectionAnalyticsPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const directionExportsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/direction-exports",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <RoleGuard allowed={["direction", "admin_rh"]}>
+        <DirectionExportsPage />
+      </RoleGuard>
+    </Suspense>
+  ),
+});
+
+const iaChatbotRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/ia-chatbot",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <ChatbotPage />
+    </Suspense>
+  ),
+});
+
+const iaDocumentsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/ia-documents",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <IaDocumentsPage />
+    </Suspense>
+  ),
+});
+
+const iaTurnoverRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/ia-turnover",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <TurnoverPage />
+    </Suspense>
+  ),
+});
+
+const iaMatchingRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: "/ia-matching",
+  component: () => (
+    <Suspense fallback={<PageLoader />}>
+      <MatchingPage />
     </Suspense>
   ),
 });
@@ -588,8 +741,20 @@ const routeTree = rootRoute.addChildren([
     enquetesRoute,
     employeeDetailRoute,
     adminUsersRoute,
+    adminRolesRoute,
+    adminSecurityRoute,
+    adminLogsRoute,
+    adminNotificationsRoute,
+    adminBackupsRoute,
     adminConfigRoute,
     directionReportsRoute,
+    directionKpiRoute,
+    directionAnalyticsRoute,
+    directionExportsRoute,
+    iaChatbotRoute,
+    iaDocumentsRoute,
+    iaTurnoverRoute,
+    iaMatchingRoute,
     genericReportsRoute,
   ]),
 ]);

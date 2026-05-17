@@ -190,6 +190,38 @@ export default function SkillsPage() {
     setLocalSkills((prev) => [...prev, skill]);
   };
 
+  const [newSoftSkill, setNewSoftSkill] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleAddSoftSkill = async () => {
+    if (!newSoftSkill.trim()) return;
+    
+    setIsSubmitting(true);
+    try {
+      // Dans une application réelle, nous utiliserions l'API pour mettre à jour les soft skills
+      // Ici nous simulons la mise à jour via le profil du collaborateur
+      const updatedSkills = [...(softSkills?.map(s => s.name) || []), newSoftSkill.trim()];
+      
+      const token = localStorage.getItem("ices_token");
+      await fetch("/api/v1/collaborateur/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ soft_skills: updatedSkills })
+      });
+      
+      toast.success("Soft skill ajoutée");
+      setNewSoftSkill("");
+      // La mise à jour réelle viendrait du refetch ou d'un état local
+    } catch (err) {
+      toast.error("Erreur lors de l'ajout");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Transformation des données pour le Radar Chart
   const radarData = allTechnicalSkills.map(s => ({
     subject: s.name,
