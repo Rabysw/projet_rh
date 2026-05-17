@@ -168,7 +168,7 @@ export default function SetupPage() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/v1/admin/company-config/setup', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/admin/company-config/setup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
