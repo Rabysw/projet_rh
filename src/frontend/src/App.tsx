@@ -155,7 +155,7 @@ async function readBootstrapState() {
   }
 
   try {
-    const response = await fetch("/api/v1/admin/company-config", {
+    const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/admin/company-config`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 

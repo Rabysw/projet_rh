@@ -37,7 +37,7 @@ export const CompanyConfigProvider: React.FC<{ children: React.ReactNode }> = ({
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch('/api/v1/admin/company-config', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/admin/company-config`, {
         headers,
       });
 
@@ -55,7 +55,7 @@ export const CompanyConfigProvider: React.FC<{ children: React.ReactNode }> = ({
   const updateConfig = async (newConfig: Partial<CompanyConfig>) => {
     try {
       const token = localStorage.getItem('ices_token');
-      const response = await fetch('/api/v1/admin/company-config', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/admin/company-config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
