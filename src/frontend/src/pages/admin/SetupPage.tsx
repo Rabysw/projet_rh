@@ -207,7 +207,7 @@ export default function SetupPage() {
       if (response.ok) {
         localStorage.removeItem('force_setup'); // On retire le flag une fois terminé
         await refreshConfig();
-        navigate({ to: '/' });
+        window.location.href = '/';
       } else {
         const data = await response.json();
         setError(data.detail || 'Erreur lors de la sauvegarde.');
