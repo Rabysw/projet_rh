@@ -31,8 +31,8 @@ class EmployeeBase(BaseModel):
     
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
-    email: str = Field(..., pattern=r'^[^@]+@[^@]+\.[^@]+$')
-    phone: str = Field(..., min_length=1, max_length=20)
+    email: Optional[str] = Field(None, pattern=r'^[^@]+@[^@]+\.[^@]+$')
+    phone: Optional[str] = Field(None, min_length=1, max_length=20)
     department_id: Optional[int] = None
     hr_role: Optional[HRRole] = None
     position: Optional[str] = None
