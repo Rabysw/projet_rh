@@ -7,7 +7,7 @@ import bcrypt
 
 from auth.auth import get_current_user, User
 from config_store import CompanyConfig, company_config_store
-from supabase_client import supabase
+from supabase_client import supabase, supabase_admin
 from utils.db_utils import retry_on_disconnect
 import config_store
 
@@ -62,7 +62,7 @@ async def list_users(current_user: User = Depends(get_current_user)):
     if current_user.role not in ["admin_rh"]:
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    response = supabase.table("users").select("id, email, role, prenom, nom, status, created_at").order("nom").execute()
+    response = supabase_admin.table("users").select("id, email, role, prenom, nom, status, created_at").order("nom").execute()
     return response.data or []
 
 @router.post("/users", tags=["admin_rh"])
@@ -99,7 +99,7 @@ async def create_user(user_data: dict, current_user: User = Depends(get_current_
     }
 
     try:
-        response = supabase.table("users").insert(new_user).execute()
+        response = supabase_admin.table("users").insert(new_user).execute()
         user = response.data[0]
         
         # If user is a collaborator, manager, or resp_rh, create an employee record
@@ -113,7 +113,7 @@ async def create_user(user_data: dict, current_user: User = Depends(get_current_
                 "hire_date": user_data.get("hire_date", datetime.now().date().isoformat()),
                 "status": "actif",
             }
-            supabase.table("employees").insert(employee_data).execute()
+            supabase_admin.table("employees").insert(employee_data).execute()
             
         return user
     except Exception as e:
@@ -128,9 +128,9 @@ async def delete_user(user_id: str, current_user: User = Depends(get_current_use
     
     try:
         # Delete employee record first
-        supabase.table("employees").delete().eq("user_id", user_id).execute()
+        supabase_admin.table("employees").delete().eq("user_id", user_id).execute()
         # Delete user record
-        supabase.table("users").delete().eq("id", user_id).execute()
+        supabase_admin.table("users").delete().eq("id", user_id).execute()
         return {"message": "Utilisateur supprimé avec succès"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la suppression: {str(e)}")
