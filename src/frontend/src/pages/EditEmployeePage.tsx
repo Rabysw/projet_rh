@@ -94,7 +94,7 @@ export default function EditEmployeePage() {
       setForm({
         first_name: employee.first_name,
         last_name: employee.last_name,
-        email: employee.email,
+        email: employee.email ?? "",
         phone: employee.phone || "",
         hr_role: employee.hr_role,
         contract_type: employee.contract_type as ContractType,
@@ -125,11 +125,9 @@ export default function EditEmployeePage() {
 
   const validate = (): boolean => {
     const errs: FormErrors = {};
-    if (!form.first_name.trim()) errs.first_name = "Le prénom est requis";
-    if (!form.last_name.trim()) errs.last_name = "Le nom est requis";
-    if (!form.email.trim()) {
-      errs.email = "L'e-mail est requis";
-    } else if (!validateEmail(form.email)) {
+    if (!form.first_name?.trim()) errs.first_name = "Le prénom est requis";
+    if (!form.last_name?.trim()) errs.last_name = "Le nom est requis";
+    if (form.email && form.email.trim() && !validateEmail(form.email)) {
       errs.email = "Veuillez entrer une adresse e-mail valide";
     }
     setErrors(errs);
