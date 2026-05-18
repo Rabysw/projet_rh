@@ -10,14 +10,16 @@ interface ApiState<T> {
 function getToken(): string | null {
   return localStorage.getItem("ices_token");
 }
+const BACKEND_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 function normalizeEndpoint(endpoint: string): string {
-  // Accept both "/api/v1/..." and relative "/dashboard/..." or "/dashboard/..."
-  if (endpoint.startsWith("/api/")) return endpoint;
-  if (endpoint.startsWith("/")) return `/api/v1${endpoint}`;
-  return `/api/v1/${endpoint}`;
-}
+  let path: string;
+  if (endpoint.startsWith("/api/")) path = endpoint;
+  else if (endpoint.startsWith("/")) path = `/api/v1${endpoint}`;
+  else path = `/api/v1/${endpoint}`;
 
+  return BACKEND_URL ? `${BACKEND_URL}${path}` : path;
+}
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
