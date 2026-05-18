@@ -102,7 +102,6 @@ async def create_user(user_data: dict, current_user: User = Depends(get_current_
         response = supabase_admin.table("users").insert(new_user).execute()
         user = response.data[0]
         
-        # If user is a collaborator, manager, or resp_rh, create an employee record
         if role in ["collaborateur", "manager", "resp_rh"]:
             employee_data = {
                 "user_id": user["id"],
@@ -117,6 +116,7 @@ async def create_user(user_data: dict, current_user: User = Depends(get_current_
             
         return user
     except Exception as e:
+        print(f"ERREUR CREATE USER: {type(e).__name__}: {str(e)}")  # ← ajoute cette ligne
         raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
 
 @router.delete("/users/{user_id}", tags=["admin_rh"])
