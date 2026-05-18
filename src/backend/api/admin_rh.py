@@ -103,8 +103,11 @@ async def create_user(user_data: dict, current_user: User = Depends(get_current_
         user = response.data[0]
         
         if role in ["collaborateur", "manager", "resp_rh"]:
+            import time
+            matricule = f"EMP{int(time.time())}"
             employee_data = {
                 "user_id": user["id"],
+                "matricule": matricule,
                 "professional_email": email,
                 "first_name": prenom,
                 "last_name": nom,
