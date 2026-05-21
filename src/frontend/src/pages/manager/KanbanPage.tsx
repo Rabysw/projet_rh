@@ -507,7 +507,7 @@ function MembersModal({ open, onClose, projectId }: {
 // ─── Create Project Modal ──────────────────────────────────────────────────────
 
 function CreateProjectModal({ open, onClose, onCreated }: {
-  open: boolean; onClose: () => void; onCreated: () => void;
+  open: boolean; onClose: () => void; onCreated: () => void | Promise<void>;
 }) {
   const [form, setForm] = useState({ name: "", description: "", start_date: "", end_date_scheduled: "", category: "Général" });
   const [loading, setLoading] = useState(false);
@@ -914,7 +914,6 @@ export default function KanbanPage() {
   const isManager = user?.role === "manager" || user?.role === "resp_rh" || user?.role === "admin_rh";
 
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const [selectNewest, setSelectNewest] = useState(false);
   const [view, setView] = useState<"kanban" | "gantt">("kanban");
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [createTaskStatus, setCreateTaskStatus] = useState<Task["status"] | null>(null);
@@ -933,13 +932,10 @@ export default function KanbanPage() {
 
   // Auto-select premier projet
   useEffect(() => {
-    if (selectNewest && projects?.length) {
-      setSelectedProjectId(projects[0].id);
-      setSelectNewest(false);
-    } else if (!selectedProjectId && projects?.length) {
+    if (!selectedProjectId && projects?.length) {
       setSelectedProjectId(projects[0].id);
     }
-  }, [projects, selectedProjectId, selectNewest]);
+  }, [projects, selectedProjectId]);
 
   // Charger les stats quand projet change
   useEffect(() => {
@@ -1106,9 +1102,9 @@ export default function KanbanPage() {
       <CreateProjectModal
         open={createProjectOpen}
         onClose={() => setCreateProjectOpen(false)}
-        onCreated={() => {
-          setSelectNewest(true);
-          refetchProjects();
+        onCreated={async () => {
+          await refetchProjects();
+          setSelectedProjectId(null);
         }}
       />
 
