@@ -5,7 +5,7 @@ Accessible : manager (gestion complète) + collaborateur (lecture + mise à jour
 """
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from auth.auth import get_current_user, User
-from supabase_client import supabase
+from supabase_client import supabase, supabase_admin
 from pydantic import BaseModel
 from typing import Optional, List
 import base64
@@ -186,7 +186,7 @@ async def create_project(
         "manager_id": employee_id,
         "status": "En cours",
     }
-    result = supabase.table("projects").insert(data).execute()
+    result = supabase_admin.table("projects").insert(data).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Erreur lors de la création du projet")
     return result.data[0]
@@ -210,7 +210,7 @@ async def update_project(
     if not updates:
         raise HTTPException(status_code=400, detail="Aucune donnée à mettre à jour")
 
-    result = supabase.table("projects").update(updates).eq("id", project_id).execute()
+    result = supabase_admin.table("projects").update(updates).eq("id", project_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Projet introuvable")
     return result.data[0]
@@ -229,7 +229,7 @@ async def delete_project(
         if not project.data or project.data[0]["manager_id"] != employee_id:
             raise HTTPException(status_code=403, detail="Accès refusé")
 
-    supabase.table("projects").delete().eq("id", project_id).execute()
+    supabase_admin.table("projects").delete().eq("id", project_id).execute()
     return {"message": "Projet supprimé"}
 
 
@@ -271,7 +271,7 @@ async def add_project_member(
         "employee_id": payload.employee_id,
         "role_in_project": payload.role_in_project,
     }
-    result = supabase.table("project_members").insert(data).execute()
+    result = supabase_admin.table("project_members").insert(data).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Erreur lors de l'ajout du membre")
     return result.data[0]
@@ -291,7 +291,7 @@ async def remove_project_member(
         if not project.data or project.data[0]["manager_id"] != employee_id:
             raise HTTPException(status_code=403, detail="Accès refusé")
 
-    supabase.table("project_members") \
+    supabase_admin.table("project_members") \
         .delete() \
         .eq("project_id", project_id) \
         .eq("employee_id", employee_id_to_remove) \
@@ -360,7 +360,7 @@ async def create_task(
         "assigned_to": payload.assigned_to,
         "created_by": employee_id,
     }
-    result = supabase.table("tasks").insert(data).execute()
+    result = supabase_admin.table("tasks").insert(data).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Erreur lors de la création de la tâche")
     return result.data[0]
@@ -385,7 +385,7 @@ async def update_task(
     if not updates:
         raise HTTPException(status_code=400, detail="Aucune donnée à mettre à jour")
 
-    result = supabase.table("tasks").update(updates).eq("id", task_id).eq("project_id", project_id).execute()
+    result = supabase_admin.table("tasks").update(updates).eq("id", task_id).eq("project_id", project_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Tâche introuvable")
     return result.data[0]
@@ -417,7 +417,7 @@ async def update_task_status(
         raise HTTPException(status_code=400, detail=f"Statut invalide. Valeurs possibles : {valid_statuses}")
 
     result = (
-        supabase.table("tasks")
+        supabase_admin.table("tasks")
         .update({"status": payload.status, "updated_at": datetime.utcnow().isoformat()})
         .eq("id", task_id)
         .eq("project_id", project_id)
@@ -442,7 +442,7 @@ async def delete_task(
         if not project.data or project.data[0]["manager_id"] != employee_id:
             raise HTTPException(status_code=403, detail="Accès refusé")
 
-    supabase.table("tasks").delete().eq("id", task_id).eq("project_id", project_id).execute()
+    supabase_admin.table("tasks").delete().eq("id", task_id).eq("project_id", project_id).execute()
     return {"message": "Tâche supprimée"}
 
 
@@ -486,7 +486,7 @@ async def add_task_comment(
         "author_id": employee_id,
         "content": payload.content.strip(),
     }
-    result = supabase.table("task_comments").insert(data).execute()
+    result = supabase_admin.table("task_comments").insert(data).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Erreur lors de l'ajout du commentaire")
     return result.data[0]
@@ -512,7 +512,7 @@ async def delete_task_comment(
     if not is_author and not is_privileged:
         raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres commentaires")
 
-    supabase.table("task_comments").delete().eq("id", comment_id).execute()
+    supabase_admin.table("task_comments").delete().eq("id", comment_id).execute()
     return {"message": "Commentaire supprimé"}
 
 
@@ -584,7 +584,7 @@ async def upload_task_file(
         "file_size": len(content),
         "mime_type": file.content_type,
     }
-    result = supabase.table("task_files").insert(data).execute()
+    result = supabase_admin.table("task_files").insert(data).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Erreur lors de l'enregistrement du fichier")
     return result.data[0]
@@ -610,7 +610,7 @@ async def delete_task_file(
     if not is_uploader and not is_privileged:
         raise HTTPException(status_code=403, detail="Accès refusé")
 
-    supabase.table("task_files").delete().eq("id", file_id).execute()
+    supabase_admin.table("task_files").delete().eq("id", file_id).execute()
     return {"message": "Fichier supprimé"}
 
 
@@ -652,7 +652,7 @@ async def add_project_note(
         "author_id": employee_id,
         "content": payload.content.strip(),
     }
-    result = supabase.table("project_notes").insert(data).execute()
+    result = supabase_admin.table("project_notes").insert(data).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Erreur lors de l'ajout de la note")
     return result.data[0]
@@ -676,7 +676,7 @@ async def delete_project_note(
     if not is_author and not is_privileged:
         raise HTTPException(status_code=403, detail="Accès refusé")
 
-    supabase.table("project_notes").delete().eq("id", note_id).execute()
+    supabase_admin.table("project_notes").delete().eq("id", note_id).execute()
     return {"message": "Note supprimée"}
 
 
