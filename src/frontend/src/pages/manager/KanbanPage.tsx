@@ -409,7 +409,7 @@ function MembersModal({ open, onClose, projectId }: {
   useEffect(() => {
     if (open) {
       fetchMembers();
-      apiFetch<Employee[]>("/api/v1/employees/").then(setEmployees).catch(() => {});
+      apiFetch<{ employees: Employee[] }>("/api/v1/employees/").then(r => setEmployees(r.employees || [])).catch(() => {});
     }
   }, [open, fetchMembers]);
 
