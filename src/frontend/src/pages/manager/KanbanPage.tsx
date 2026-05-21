@@ -507,7 +507,7 @@ function MembersModal({ open, onClose, projectId }: {
 // ─── Create Project Modal ──────────────────────────────────────────────────────
 
 function CreateProjectModal({ open, onClose, onCreated }: {
-  open: boolean; onClose: () => void; onCreated: () => void | Promise<void>;
+  open: boolean; onClose: () => void; onCreated: (newProject: Project) => void;
 }) {
   const [form, setForm] = useState({ name: "", description: "", start_date: "", end_date_scheduled: "", category: "Général" });
   const [loading, setLoading] = useState(false);
@@ -516,11 +516,11 @@ function CreateProjectModal({ open, onClose, onCreated }: {
     if (!form.name.trim()) return toast.error("Le nom est requis");
     setLoading(true);
     try {
-      await apiFetch("/api/v1/projects/", { method: "POST", body: JSON.stringify(form) });
+      const newProject = await apiFetch<Project>("/api/v1/projects/", { method: "POST", body: JSON.stringify(form) });
       toast.success("Projet créé avec succès");
-      onCreated();
       onClose();
       setForm({ name: "", description: "", start_date: "", end_date_scheduled: "", category: "Général" });
+      onCreated(newProject);
     } catch (e: any) {
       toast.error(e.message || "Erreur");
     } finally {
@@ -1102,9 +1102,9 @@ export default function KanbanPage() {
       <CreateProjectModal
         open={createProjectOpen}
         onClose={() => setCreateProjectOpen(false)}
-        onCreated={async () => {
-          await refetchProjects();
-          setSelectedProjectId(null);
+        onCreated={(newProject: Project) => {
+          setSelectedProjectId(newProject.id);
+          refetchProjects();
         }}
       />
 
