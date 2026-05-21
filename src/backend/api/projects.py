@@ -41,7 +41,7 @@ def _assert_project_access(project_id: int, employee_id: int, role: str):
     if role in ("resp_rh", "admin_rh", "direction"):
         return  # accès complet
 
-    project = supabase.table("projects").select("id, manager_id").eq("id", project_id).limit(1).execute()
+    project = supabase_admin.table("projects").select("id, manager_id").eq("id", project_id).limit(1).execute()
     if not project.data:
         raise HTTPException(status_code=404, detail="Projet introuvable")
 
@@ -50,7 +50,7 @@ def _assert_project_access(project_id: int, employee_id: int, role: str):
 
     # Vérifier si collaborateur membre
     membership = (
-        supabase.table("project_members")
+        supabase_admin.table("project_members")
         .select("id")
         .eq("project_id", project_id)
         .eq("employee_id", employee_id)
@@ -129,7 +129,7 @@ async def list_projects(current_user: User = Depends(get_current_user)):
 
     if role in ("resp_rh", "admin_rh", "direction"):
         result = (
-            supabase.table("projects")
+            supabase_admin.table("projects")
             .select("*")
             .order("created_at", desc=True)
             .execute()
@@ -138,17 +138,18 @@ async def list_projects(current_user: User = Depends(get_current_user)):
 
     if role == "manager":
         result = (
-            supabase.table("projects")
+            supabase_admin.table("projects")
             .select("*")
             .eq("manager_id", employee_id)
             .order("created_at", desc=True)
             .execute()
         )
+        print(f"[DEBUG] list_projects manager employee_id={employee_id} -> {len(result.data or [])} projets: {[p['id'] for p in (result.data or [])]}")
         return result.data or []
 
     # collaborateur : projets où il est membre
     memberships = (
-        supabase.table("project_members")
+        supabase_admin.table("project_members")
         .select("project_id")
         .eq("employee_id", employee_id)
         .execute()
@@ -157,7 +158,7 @@ async def list_projects(current_user: User = Depends(get_current_user)):
         return []
     project_ids = [m["project_id"] for m in memberships.data]
     result = (
-        supabase.table("projects")
+        supabase_admin.table("projects")
         .select("*")
         .in_("id", project_ids)
         .order("created_at", desc=True)
@@ -189,6 +190,7 @@ async def create_project(
     result = supabase_admin.table("projects").insert(data).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Erreur lors de la création du projet")
+    print(f"[DEBUG] create_project user_id={current_user.id} employee_id={employee_id} -> projet id={result.data[0]['id']}")
     return result.data[0]
 
 
@@ -202,7 +204,7 @@ async def update_project(
     employee_id = _get_employee_id(str(current_user.id))
 
     if current_user.role not in ("resp_rh", "admin_rh", "direction"):
-        project = supabase.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
+        project = supabase_admin.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
         if not project.data or project.data[0]["manager_id"] != employee_id:
             raise HTTPException(status_code=403, detail="Accès refusé")
 
@@ -225,7 +227,7 @@ async def delete_project(
     employee_id = _get_employee_id(str(current_user.id))
 
     if current_user.role not in ("resp_rh", "admin_rh"):
-        project = supabase.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
+        project = supabase_admin.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
         if not project.data or project.data[0]["manager_id"] != employee_id:
             raise HTTPException(status_code=403, detail="Accès refusé")
 
@@ -244,7 +246,7 @@ async def get_project_members(
     _assert_project_access(project_id, employee_id, current_user.role)
 
     result = (
-        supabase.table("project_members")
+        supabase_admin.table("project_members")
         .select("*, employees(id, first_name, last_name, position, profile_picture_url)")
         .eq("project_id", project_id)
         .execute()
@@ -262,7 +264,7 @@ async def add_project_member(
     employee_id = _get_employee_id(str(current_user.id))
 
     if current_user.role not in ("resp_rh", "admin_rh"):
-        project = supabase.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
+        project = supabase_admin.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
         if not project.data or project.data[0]["manager_id"] != employee_id:
             raise HTTPException(status_code=403, detail="Seul le manager peut ajouter des membres")
 
@@ -287,7 +289,7 @@ async def remove_project_member(
     employee_id = _get_employee_id(str(current_user.id))
 
     if current_user.role not in ("resp_rh", "admin_rh"):
-        project = supabase.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
+        project = supabase_admin.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
         if not project.data or project.data[0]["manager_id"] != employee_id:
             raise HTTPException(status_code=403, detail="Accès refusé")
 
@@ -309,7 +311,7 @@ async def get_my_tasks(current_user: User = Depends(get_current_user)):
     """
     employee_id = _get_employee_id(str(current_user.id))
     result = (
-        supabase.table("tasks")
+        supabase_admin.table("tasks")
         .select("*, projects(id, name, status)")
         .eq("assigned_to", employee_id)
         .order("due_date", desc=False)
@@ -327,7 +329,7 @@ async def get_project_tasks(
     _assert_project_access(project_id, employee_id, current_user.role)
 
     result = (
-        supabase.table("tasks")
+        supabase_admin.table("tasks")
         .select("*, employees!tasks_assigned_to_fkey(id, first_name, last_name)")
         .eq("project_id", project_id)
         .order("created_at", desc=True)
@@ -346,7 +348,7 @@ async def create_task(
     employee_id = _get_employee_id(str(current_user.id))
 
     if current_user.role not in ("resp_rh", "admin_rh"):
-        project = supabase.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
+        project = supabase_admin.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
         if not project.data or project.data[0]["manager_id"] != employee_id:
             raise HTTPException(status_code=403, detail="Seul le manager peut créer des tâches")
 
@@ -377,7 +379,7 @@ async def update_task(
     employee_id = _get_employee_id(str(current_user.id))
 
     if current_user.role not in ("resp_rh", "admin_rh"):
-        project = supabase.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
+        project = supabase_admin.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
         if not project.data or project.data[0]["manager_id"] != employee_id:
             raise HTTPException(status_code=403, detail="Accès refusé")
 
@@ -408,7 +410,7 @@ async def update_task_status(
 
     # Si collaborateur, vérifier que la tâche lui est assignée
     if current_user.role == "collaborateur":
-        task = supabase.table("tasks").select("assigned_to").eq("id", task_id).limit(1).execute()
+        task = supabase_admin.table("tasks").select("assigned_to").eq("id", task_id).limit(1).execute()
         if not task.data or task.data[0]["assigned_to"] != employee_id:
             raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres tâches")
 
@@ -438,7 +440,7 @@ async def delete_task(
     employee_id = _get_employee_id(str(current_user.id))
 
     if current_user.role not in ("resp_rh", "admin_rh"):
-        project = supabase.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
+        project = supabase_admin.table("projects").select("manager_id").eq("id", project_id).limit(1).execute()
         if not project.data or project.data[0]["manager_id"] != employee_id:
             raise HTTPException(status_code=403, detail="Accès refusé")
 
@@ -458,7 +460,7 @@ async def get_task_comments(
     _assert_project_access(project_id, employee_id, current_user.role)
 
     result = (
-        supabase.table("task_comments")
+        supabase_admin.table("task_comments")
         .select("*, employees!task_comments_author_id_fkey(id, first_name, last_name, profile_picture_url)")
         .eq("task_id", task_id)
         .order("created_at", desc=False)
@@ -502,7 +504,7 @@ async def delete_task_comment(
     """Supprime un commentaire. Seul l'auteur ou le manager peut supprimer."""
     employee_id = _get_employee_id(str(current_user.id))
 
-    comment = supabase.table("task_comments").select("author_id").eq("id", comment_id).limit(1).execute()
+    comment = supabase_admin.table("task_comments").select("author_id").eq("id", comment_id).limit(1).execute()
     if not comment.data:
         raise HTTPException(status_code=404, detail="Commentaire introuvable")
 
@@ -528,7 +530,7 @@ async def get_task_files(
     _assert_project_access(project_id, employee_id, current_user.role)
 
     result = (
-        supabase.table("task_files")
+        supabase_admin.table("task_files")
         .select("*, employees!task_files_uploaded_by_fkey(id, first_name, last_name)")
         .eq("task_id", task_id)
         .order("created_at", desc=True)
@@ -600,7 +602,7 @@ async def delete_task_file(
     """Supprime un fichier. Seul l'auteur ou le manager peut supprimer."""
     employee_id = _get_employee_id(str(current_user.id))
 
-    file_record = supabase.table("task_files").select("uploaded_by, file_url").eq("id", file_id).limit(1).execute()
+    file_record = supabase_admin.table("task_files").select("uploaded_by, file_url").eq("id", file_id).limit(1).execute()
     if not file_record.data:
         raise HTTPException(status_code=404, detail="Fichier introuvable")
 
@@ -625,7 +627,7 @@ async def get_project_notes(
     _assert_project_access(project_id, employee_id, current_user.role)
 
     result = (
-        supabase.table("project_notes")
+        supabase_admin.table("project_notes")
         .select("*, employees!project_notes_author_id_fkey(id, first_name, last_name, profile_picture_url)")
         .eq("project_id", project_id)
         .order("created_at", desc=True)
@@ -666,7 +668,7 @@ async def delete_project_note(
 ):
     employee_id = _get_employee_id(str(current_user.id))
 
-    note = supabase.table("project_notes").select("author_id").eq("id", note_id).limit(1).execute()
+    note = supabase_admin.table("project_notes").select("author_id").eq("id", note_id).limit(1).execute()
     if not note.data:
         raise HTTPException(status_code=404, detail="Note introuvable")
 
@@ -691,8 +693,8 @@ async def get_project_stats(
     employee_id = _get_employee_id(str(current_user.id))
     _assert_project_access(project_id, employee_id, current_user.role)
 
-    tasks = supabase.table("tasks").select("status, due_date, assigned_to").eq("project_id", project_id).execute()
-    members = supabase.table("project_members").select("id").eq("project_id", project_id).execute()
+    tasks = supabase_admin.table("tasks").select("status, due_date, assigned_to").eq("project_id", project_id).execute()
+    members = supabase_admin.table("project_members").select("id").eq("project_id", project_id).execute()
 
     task_list = tasks.data or []
     today = datetime.utcnow().date().isoformat()
